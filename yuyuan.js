@@ -1,5 +1,5 @@
 /*!
-// 独立小手机脚本(芋圆机) v206 - 修图片帖被NPC当纯文字:图片帖的画面描述存在 post.coverText,但各处给AI的帖子描述只用了 title+content、没带coverText也没说这是图,导致NPC按纯文字回。四处补上图片说明:①generatePostComments postBody 加 imgLine(标明这是图片笔记+画面内容,要求当照片评论);②regenCommentReply(让TA回复/帖主回/围观)的 postCtx 加图片分支;③myPostsBrief(粉丝群看楼主帖)对 type==image 标[图片笔记·画面:..];④boostGroupFromPost(导热度进群)的 open.topic 对图片帖标明是图。现在发帖评论、让TA回复、粉丝群讨论都会把图片帖当照片来反应。
+// 独立小手机脚本(芋圆机) v209 - 修评论选了表情/图但没预览(看不见选中没):预览栏(已附图/已选表情)和回复栏都是流式元素,而评论输入栏 .xhs-c-bottom-input 是 position:absolute;bottom:0 浮在最底,把它们盖住了,所以预览其实渲染了却被挡。改为把评论输入栏做成流式(去掉 absolute/z-index,加 flex-shrink:0,像微信聊天输入栏那样),靠 flex:1 的评论滚动区把它顶到底部;这样'已附图/已选表情'预览栏会正常显示在输入栏上方,选没选中一目了然。配套:移除 .xhs-sticker-tray 的 margin-bottom(原为绝对输入栏让位,现不需要,顺带修好微信聊天表情面板的多余间隙);评论列表底部占位 150px→8px(不再需要为绝对输入栏留空)。
  * 触发: /yuyuan 打开小红书
  * 功能: 刷帖子、发帖、粉丝群创建+群聊、同步主对话
  * 基于 SillyTavern JS-Slash-Runner
@@ -2195,7 +2195,7 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
           <div class="xhs-c-title">共 ${total} 条评论${cmtSelMode ? ' · 点选要删除的' : ''}</div>
           ${comments || '<div class="xhs-c-empty">来发表第一条评论吧</div>'}
         </div>
-        <div style="height:150px"></div>
+        <div style="height:8px"></div>
       </div>
       ${d.routeContext.forwarding === post.id ? buildForwardSheet(d, post.id) : ''}
       ${!cmtSelMode && replyName ? `<div class="xhs-reply-bar">正在回复 <b>@${esc(replyName)}</b><button class="xhs-reply-cancel" data-action="cancel-reply" data-id="${post.id}">✗</button></div>` : ''}
@@ -2571,7 +2571,7 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
     // 走"char 回复"路径:点的是 char 自己的评论(接着说),或在 char 帖子下点了你自己的评论(召唤 char 回你)
     const charReply = isCharAcct(clicked.author, d) || (isCharPost && clicked.author === userName);
     const thread = [top, ...(top.replies || [])];
-    const threadText = thread.map(x => `${x.author}${x.reply_to ? '(回复' + x.reply_to + ')' : ''}: ${x.text || (x.sticker ? '[表情]' : '')}`).join('\n');
+    const threadText = thread.map(x => `${x.author}${x.reply_to ? '(回复' + x.reply_to + ')' : ''}: ${x.text || ''}${x.img ? `[ta发了一张图·画面:${String(x.img).slice(0, 60)}]` : (x.sticker ? '[表情]' : '')}`).join('\n');
     const postCtx = post.type === 'chat' && post.chatlog
       ? `帖子是聊天记录截图:\n${post.chatlog.map(x => `${x.role === 'user' ? '楼主' : (post.charName || 'TA')}: ${x.text || (x.sticker ? '[表情]' : x.img ? '[图片]' : '')}`).join('\n')}`
       : post.type === 'image'
@@ -3927,7 +3927,7 @@ ${styleHint(d, true)}
     const members = group.members || [];
     const npcMembers = members.filter(m => !m.isChar);
     const charInGroup = members.some(m => m.isChar);
-    const recentChat = (group.chat || []).filter(m => m.role !== 'heart').slice(-14).map(m => `${m.name || d.userName}: ${m.kind === 'share' ? shareCtxText(d, m, { knowChar: true }) : (m.text || (m.kind === 'transfer' ? '[转账]' : m.kind === 'image' ? '[图片]' : m.kind === 'voice' ? '[语音]' : ''))}`).join('\n');
+    const recentChat = (group.chat || []).filter(m => m.role !== 'heart').slice(-14).map(m => `${m.name || d.userName}: ${m.kind === 'share' ? shareCtxText(d, m, { knowChar: true }) : (m.kind === 'image' ? `[图片:${m.text || ''}]` : m.kind === 'voice' ? `[语音]${m.text || ''}` : (m.kind === 'transfer' || m.kind === 'red') ? '[转账]' : (m.text || ''))}`).join('\n');
     const chatArr = group.chat || [];
     let bi = chatArr.length - 1; const userBatch = [];
     while (bi >= 0 && chatArr[bi].role === 'me') { userBatch.unshift(chatArr[bi].kind === 'share' ? shareCtxText(d, chatArr[bi], { knowChar: true }) : (chatArr[bi].text || '')); bi--; }
@@ -4003,7 +4003,7 @@ ${recent2}
     if (group.app === 'wx') return genWxGroupReply(groupId);
     toastr.info('群友回复中…');
     const memberList = group.members.map(m => `「${m.name}」(${m.persona})`).join('; ');
-    const recentChat = group.chat.filter(m => m.role !== 'heart').slice(-12).map(m => `${m.name || '用户'}: ${m.kind === 'share' ? shareCtxText(d, m) : (m.text || (m.kind === 'voice' ? '[语音]' + (m.text || '') : (m.kind === 'transfer' || m.kind === 'red') ? '[转账]' : m.kind === 'image' ? '[图片]' + (m.text || '') : ''))}`).join('\n');
+    const recentChat = group.chat.filter(m => m.role !== 'heart').slice(-12).map(m => `${m.name || '用户'}: ${m.kind === 'share' ? shareCtxText(d, m) : (m.kind === 'image' ? `[图片:${m.text || ''}]` : m.kind === 'voice' ? `[语音]${m.text || ''}` : (m.kind === 'transfer' || m.kind === 'red') ? '[转账]' : (m.text || ''))}`).join('\n');
     const topic = group.topic ? `这个群是围绕「${group.topic}」建立的粉丝群。\n` : '';
     const lurk = !!d.charLurk;
     // 收集自上一次非本人消息以来、user 这一轮发的群消息(点 ✨ 时打包同步进主线)
@@ -6323,10 +6323,9 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
 
       /* 详情底部评论输入 */
       .xhs-c-bottom-input {
-        position: absolute; bottom: 0; left: 0; right: 0;
+        flex-shrink: 0;
         display: flex; gap: 6px; padding: 6px 10px 10px; align-items: center;
         background: #fff; border-top: 1px solid #f0f0f0;
-        z-index: 10;
       }
       .xhs-c-bottom-input input {
         flex: 1 1 auto; min-width: 0; padding: 6px 14px;
@@ -6544,7 +6543,6 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
       .xhs-sticker-tray {
         display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px;
         background: #eef1f5; flex-shrink: 0; max-height: 200px; overflow-y: auto;
-        margin-bottom: 60px;
         -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y;
       }
       .xhs-sticker-pick { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; cursor: pointer; background: #fff; }
@@ -6974,7 +6972,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   }
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v206 已加载,输入 /yuyuan 打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v209 已加载,输入 /yuyuan 打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

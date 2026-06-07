@@ -1,5 +1,5 @@
 /*!
-// 独立小手机脚本(芋圆机) v203 - 修缩小尺寸后底部发消息框被圆角外框裁切:①#xhs-frame 圆角由 30px 改为 30px 30px 18px 18px(顶部仍 30px 圆润,底部收小到 18px,让输入栏边角避开弧角);②微信/私聊/群聊输入栏 .xhs-grp-input 内边距 8px→8px 10px 14px,小红书评论输入栏 .xhs-c-bottom-input 8px 10px→8px 10px 14px,把按钮/输入框往上抬出弧角区;③评论表情面板 .xhs-sticker-tray margin-bottom 54→60px,适配略变高的评论输入栏。微信和小红书的发消息框均不再被外框边角挡住。
+// 独立小手机脚本(芋圆机) v204 - 发消息框做矮:微信/群聊/私聊输入框 padding 9px→6px、小红书评论输入框 8px→6px(竖向),发送键 36→32、图标键 34→30,两个输入栏整体内边距 8px10px14px→6px10px10px。整条输入栏从约58px降到约48px,更不容易被底部弧角/小屏边缘挡住。
  * 触发: /yuyuan 打开小红书
  * 功能: 刷帖子、发帖、粉丝群创建+群聊、同步主对话
  * 基于 SillyTavern JS-Slash-Runner
@@ -6316,12 +6316,12 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
       /* 详情底部评论输入 */
       .xhs-c-bottom-input {
         position: absolute; bottom: 0; left: 0; right: 0;
-        display: flex; gap: 6px; padding: 8px 10px 14px; align-items: center;
+        display: flex; gap: 6px; padding: 6px 10px 10px; align-items: center;
         background: #fff; border-top: 1px solid #f0f0f0;
         z-index: 10;
       }
       .xhs-c-bottom-input input {
-        flex: 1 1 auto; min-width: 0; padding: 8px 14px;
+        flex: 1 1 auto; min-width: 0; padding: 6px 14px;
         border: none; background: #f5f5f5;
         border-radius: 18px;
         font-size: 13px;
@@ -6400,24 +6400,24 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
         width: fit-content; max-width: 70%;
       }
       .xhs-grp-input {
-        display: flex; gap: 6px; padding: 8px 10px 14px; align-items: center;
+        display: flex; gap: 6px; padding: 6px 10px 10px; align-items: center;
         background: #f7f7f7; border-top: 1px solid #ddd;
         flex-shrink: 0;
       }
       .xhs-grp-input input {
-        flex: 1; padding: 9px 12px;
+        flex: 1; padding: 6px 12px;
         border: 1px solid #ddd; border-radius: 18px;
         font-size: 13px; background: #fff;
       }
       .xhs-chat-icon {
         background: #fff; border: 1px solid #e2e2e2; border-radius: 50%;
-        width: 34px; height: 34px; flex-shrink: 0; cursor: pointer; padding: 0;
+        width: 30px; height: 30px; flex-shrink: 0; cursor: pointer; padding: 0;
         display: flex; align-items: center; justify-content: center;
       }
       .xhs-chat-icon svg { width: 20px; height: 20px; }
       .xhs-chat-send {
         background: #ff2442; border: none; border-radius: 50%;
-        width: 36px; height: 36px; flex-shrink: 0; cursor: pointer; padding: 0;
+        width: 32px; height: 32px; flex-shrink: 0; cursor: pointer; padding: 0;
         display: flex; align-items: center; justify-content: center;
       }
       .xhs-chat-send svg { width: 20px; height: 20px; }
@@ -6966,7 +6966,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   }
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v203 已加载,输入 /yuyuan 打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v204 已加载,输入 /yuyuan 打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

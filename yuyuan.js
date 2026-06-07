@@ -1,5 +1,5 @@
 /*!
-// 独立小手机脚本(芋圆机) v204 - 发消息框做矮:微信/群聊/私聊输入框 padding 9px→6px、小红书评论输入框 8px→6px(竖向),发送键 36→32、图标键 34→30,两个输入栏整体内边距 8px10px14px→6px10px10px。整条输入栏从约58px降到约48px,更不容易被底部弧角/小屏边缘挡住。
+// 独立小手机脚本(芋圆机) v205 - 真正修发消息框被挡:根因是微信/私聊/群聊输入框 .xhs-grp-input input 只有 flex:1、缺 min-width:0,导致它不肯收缩、保持默认约20字符宽度,把右侧发送键(纸飞机)挤出屏幕外;手机宽度从360缩到320后正好挤爆,所以是'改了边框/尺寸才出现'。修:给 .xhs-grp-input input 加 min-width:0,输入框可正常收缩、发送键回到可见区。(小红书评论框 .xhs-c-bottom-input input 本就有 min-width:0,不受影响。)v203/v204 的圆角与输入栏变矮一并保留。
  * 触发: /yuyuan 打开小红书
  * 功能: 刷帖子、发帖、粉丝群创建+群聊、同步主对话
  * 基于 SillyTavern JS-Slash-Runner
@@ -6405,7 +6405,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
         flex-shrink: 0;
       }
       .xhs-grp-input input {
-        flex: 1; padding: 6px 12px;
+        flex: 1; min-width: 0; padding: 6px 12px;
         border: 1px solid #ddd; border-radius: 18px;
         font-size: 13px; background: #fff;
       }
@@ -6966,7 +6966,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   }
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v204 已加载,输入 /yuyuan 打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v205 已加载,输入 /yuyuan 打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

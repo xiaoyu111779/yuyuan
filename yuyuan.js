@@ -1,5 +1,5 @@
 /*!
-// 独立小手机脚本(芋圆机) v209 - 修评论选了表情/图但没预览(看不见选中没):预览栏(已附图/已选表情)和回复栏都是流式元素,而评论输入栏 .xhs-c-bottom-input 是 position:absolute;bottom:0 浮在最底,把它们盖住了,所以预览其实渲染了却被挡。改为把评论输入栏做成流式(去掉 absolute/z-index,加 flex-shrink:0,像微信聊天输入栏那样),靠 flex:1 的评论滚动区把它顶到底部;这样'已附图/已选表情'预览栏会正常显示在输入栏上方,选没选中一目了然。配套:移除 .xhs-sticker-tray 的 margin-bottom(原为绝对输入栏让位,现不需要,顺带修好微信聊天表情面板的多余间隙);评论列表底部占位 150px→8px(不再需要为绝对输入栏留空)。
+// 独立小手机脚本(芋圆机) v218 - 把自动注册的酒馆助手脚本按钮名从'芋圆机'改成'芋圆机弹出'(避免和用户 QR 按钮同名混淆):replaceScriptButtons 写回时先 filter 掉旧的'芋圆机'按钮(v217 自动建的)再确保'芋圆机弹出'存在,只动本脚本自己的按钮、不影响 QR;eventOn 监听列表加上'芋圆机弹出'。点该按钮即开手机。
  * 触发: /yuyuan 打开小红书
  * 功能: 刷帖子、发帖、粉丝群创建+群聊、同步主对话
  * 基于 SillyTavern JS-Slash-Runner
@@ -292,6 +292,14 @@
   function parseImgText(txt) {
     const m = String(txt || '').trim().match(/^\[\s*图片\s*[:：]?\s*([\s\S]*?)\]$/);
     return m ? { kind: 'image', text: (m[1] || '').trim() } : null;
+  }
+  // 聊天里把整条 [表情:名字] 解析成表情消息(名字须在用户导入的表情里);不是表情/没匹配返回 null
+  function parseStickerText(txt, d) {
+    const m = String(txt || '').trim().match(/^\[\s*表情\s*[:：]\s*([\s\S]*?)\]$/);
+    if (!m) return null;
+    const name = (m[1] || '').trim();
+    const stk = ((d || loadData()).stickers || []).find(s => s && s.name === name);
+    return stk ? { kind: 'sticker', url: stk.url, name: stk.name } : null;
   }
   // 整体聊天风格(活人感):只用于聊天类生成(私信/群聊),发帖评论不注入;对所有聊天的人通用
   function chatStyleLine(d) {
@@ -1710,7 +1718,7 @@
   function stickerHintLine(d) {
     const names = (d.stickers || []).map(s => s.name).filter(Boolean);
     const base = `\n【表情】想表达情绪就用【真 emoji】(🙂😂🥺😏🙄…),【别打「[微笑]」「[捂脸]」这种方括号文字码】。`;
-    const stk = names.length ? `你也可以偶尔(别每次、别滥用)发一个表情包库里的表情来代替或补充文字,可用表情:${names.join('、')};想发就在 JSON 里加 "sticker":"表情名"(必须从列表里原样选一个;不发就别加这个字段)。` : '';
+    const stk = names.length ? `聊到开心/调侃/害羞/无语/想活跃气氛时,就【大方地】发表情包,像真人聊天那样常用(不必每条都发,但该发就发、别一连串只发表情刷屏);可用表情:${names.join('、')};想发就在 JSON 里加 "sticker":"表情名"(必须从列表里原样选一个;不发就别加这个字段)。` : '';
     return base + stk;
   }
   function stickerUrlMap(d) { const m = {}; (d.stickers || []).forEach(s => { if (s && s.name) m[s.name] = s.url; }); return m; }
@@ -3976,14 +3984,14 @@ ${role ? `人设: ${role}\n` : ''}${cworld ? `世界观: ${cworld}\n` : ''}${wb 
 群里最近在聊:
 ${recent2}
 【别替「${freshD.userName}」脑补动作】:只能就 ta 在群里【真的打出来的文字】反应;ta 没说过的动作或决定别当成 ta 做了——哪怕群友起哄让 ta 去做某事(打你、去哪、答应什么),只要 ta 自己没说做了,就当 ta 没做、没答应,别替 ta 说成"ta 已经在做了"。
-判断 ${cname} 这轮要不要在群里说话:话少/高冷的人设就少说或不说(speak=false),活跃就多说;若 ${freshD.userName} 刚在群里 @ 或提到你,大概率要回。一旦说话拆成 1~4 条很短的微信消息。想发图就把图片单独作为一条,写成「[图片:画面的具体描述]」(务必带描述,别只写[图片])。若你这轮是【专门回复群里某一条具体消息】,可加 "quote" 字段=被回复消息原文(照抄,20字内);不针对具体某条就别加。${styleHint(d, true)}
+判断 ${cname} 这轮要不要在群里说话:话少/高冷的人设就少说或不说(speak=false),活跃就多说;若 ${freshD.userName} 刚在群里 @ 或提到你,大概率要回。一旦说话拆成 1~4 条很短的微信消息。想发图就把图片单独作为一条,写成「[图片:画面的具体描述]」(务必带描述,别只写[图片])。${(freshD.stickers || []).length ? `想发表情包就把它单独作为一条,写成「[表情:表情名]」(表情名必须从这些里原样挑:${(freshD.stickers || []).map(s => s.name).join('、')};聊得来/调侃/活跃气氛时【大方发】、像真人群聊那样常用,但别一连串只刷表情)。` : ''}若你这轮是【专门回复群里某一条具体消息】,可加 "quote" 字段=被回复消息原文(照抄,20字内);不针对具体某条就别加。${styleHint(d, true)}
 严格JSON,不要解释: {"speak":true或false,"texts":["短句1","短句2"],"quote":"(可选)被回复的那条群消息原文,20字内"}`;
       const craw = await callXhsAPI(csys, `${cname} 群里发言`);
       const cj = tryParseJSON(craw, { speak: false, texts: [] });
       if (cj.speak === true && Array.isArray(cj.texts)) {
         const cQRef = cj.quote ? npcQuoteRef(fg.chat.slice(0), cj.quote, freshD.userName) : null;
         let _cqd = false;
-        cj.texts.map(t => String(t || '').trim()).filter(Boolean).slice(0, 4).forEach(tx => { const im = parseImgText(tx); if (im) { const _m = { role: 'npc', name: cname, isChar: true, kind: 'image', text: im.text, time: tk++, st: stStamp(freshD) }; if (cQRef && !_cqd) { _m.quote = cQRef; _cqd = true; } fg.chat.push(_m); charSaid.push(im.text ? `[图片:${im.text}]` : '[图片]'); } else { const _m = { role: 'npc', name: cname, isChar: true, text: tx, time: tk++, st: stStamp(freshD) }; if (cQRef && !_cqd) { _m.quote = cQRef; _cqd = true; } fg.chat.push(_m); charSaid.push(tx); } });
+        cj.texts.map(t => String(t || '').trim()).filter(Boolean).slice(0, 4).forEach(tx => { const stk = parseStickerText(tx, freshD); const im = stk ? null : parseImgText(tx); const _m = stk ? { role: 'npc', name: cname, isChar: true, kind: 'sticker', url: stk.url, time: tk++, st: stStamp(freshD) } : im ? { role: 'npc', name: cname, isChar: true, kind: 'image', text: im.text, time: tk++, st: stStamp(freshD) } : { role: 'npc', name: cname, isChar: true, text: tx, time: tk++, st: stStamp(freshD) }; if (cQRef && !_cqd) { _m.quote = cQRef; _cqd = true; } fg.chat.push(_m); charSaid.push(stk ? '[表情]' : im ? (im.text ? `[图片:${im.text}]` : '[图片]') : tx); });
       }
     }
     fg.lastTime = tk;
@@ -4025,7 +4033,7 @@ ${recentChat}
 2. 不要让"${d.userName}"出现
 3. 体现各自人设,可以互相调侃/接梗/八卦
 4. 【像真人发微信】每个人的发言要拆成 1~4 条很短的消息放进 texts 数组,一句一条、口语断句,可带语气词/emoji;【禁止】一条写一大段长篇大论,单条尽量短(十几个字以内最好)。
-5. 若群里有人转发了小红书笔记(上面会带「笔记内容:…」),你是【看得到笔记内容】的,可以就内容评价/讨论/玩梗,别假装没看见。${styleHint(d, false)}
+5. 若群里有人转发了小红书笔记(上面会带「笔记内容:…」),你是【看得到笔记内容】的,可以就内容评价/讨论/玩梗,别假装没看见。${styleHint(d, false)}${(d.stickers || []).length ? `\n6. 群里聊嗨时大家爱发表情包活跃气氛:想发就把它【单独作为 texts 里的一条】,写成「[表情:表情名]」(表情名必须从这些里原样挑:${(d.stickers || []).map(s => s.name).join('、')});该发就发、像真人群聊那样常用,但别一连串只刷表情。` : ''}
 严格JSON,不要解释: {"replies":[{"name":"成员名","texts":["短句1","短句2"]}]}`;
     const raw = await callXhsAPI(sys, '群成员回复,每人拆成几条短消息', { noContext: true });
     if (!raw) return;
@@ -4043,8 +4051,11 @@ ${recentChat}
       arr.forEach(t => {
         const txt = String(t || '').trim();
         if (!txt) return;
-        freshGroup.chat.push({ role: 'npc', name: r.name, text: txt, time: tk++, st: stStamp(freshD) });
-        said.push(txt);
+        const stk = parseStickerText(txt, freshD);
+        const im = stk ? null : parseImgText(txt);
+        if (stk) { freshGroup.chat.push({ role: 'npc', name: r.name, kind: 'sticker', url: stk.url, time: tk++, st: stStamp(freshD) }); said.push('[表情]'); }
+        else if (im) { freshGroup.chat.push({ role: 'npc', name: r.name, kind: 'image', text: im.text, time: tk++, st: stStamp(freshD) }); said.push(im.text ? `[图片:${im.text}]` : '[图片]'); }
+        else { freshGroup.chat.push({ role: 'npc', name: r.name, text: txt, time: tk++, st: stStamp(freshD) }); said.push(txt); }
       });
       if (said.length) npcLines.push(`${r.name}:「${said.join(' ')}」`);
     });
@@ -4580,7 +4591,7 @@ ${crole ? `【角色卡/绑定人设】:\n${crole}\n` : ''}${cworld ? `【世界
     // 允许对方偶尔发用户导入的表情包
     const _stkNames = (d.stickers || []).map(s => s.name);
     if (_stkNames.length && sys) {
-      sys = sys.replace('严格 JSON,不要解释:', `【表情包】你也可以偶尔(不是每次,别滥用)发一个表情代替或补充文字,可用表情:${_stkNames.join('、')}。想发就在 JSON 里加 "sticker":"表情名"(必须从列表里原样选一个;不发就别加这个字段)。\n严格 JSON,不要解释:`);
+      sys = sys.replace('严格 JSON,不要解释:', `【表情包】聊得开心/调侃/害羞/想活跃气氛时,就【大方地】发表情代替或补充文字,像真人聊天那样常用(该发就发,别一连串只刷表情),可用表情:${_stkNames.join('、')}。想发就在 JSON 里加 "sticker":"表情名"(必须从列表里原样选一个;不发就别加这个字段)。\n严格 JSON,不要解释:`);
     }
     if (sys) {
       sys = sys.replace('严格 JSON,不要解释:', `【引用回复】如果你这条是【专门回复前面某一条具体消息】(对方刚说的某句话),可在 JSON 顶层加 "quote":"被你回复的那条消息原文(照抄那句话,20字内)";只在确实针对某一条时才加,平常聊天别加这个字段。\n严格 JSON,不要解释:`);
@@ -5482,6 +5493,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     bindPhoneChrome(doc, float, fab);
     updateXhsClock();
     updateXhsBattery();
+    try { const lb = doc.getElementById('xhs-float-btn'); if (lb) lb.style.display = 'none'; } catch (e) {}
   }
 
   function charmInner(d) {
@@ -5623,6 +5635,79 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     const fab = doc.getElementById('xhs-fab');
     if (float && float.parentNode) float.parentNode.removeChild(float);
     if (fab && fab.parentNode) fab.parentNode.removeChild(fab);
+    try { ensureFab(false); const lb = doc.getElementById('xhs-float-btn'); if (lb) lb.style.display = 'flex'; } catch (e) {}
+  }
+
+  // 创建/确保常驻悬浮启动按钮存在(可拖动+记住位置+点击打开)。force=true 强制重建(新一次脚本运行用,刷新事件绑定)。
+  // 手机端脚本加载早、body 可能尚未就绪,本函数在 body 没好时安全返回 false,由加载段的多次重试补建。
+  function ensureFab(force) {
+    try {
+      const TOP = getTop();
+      const doc = TOP.document;
+      if (!doc || !doc.body) return false;
+      const ex = doc.getElementById('xhs-float-btn');
+      if (ex && !force) return true;
+      if (ex && ex.parentNode) ex.parentNode.removeChild(ex);
+      const btn = doc.createElement('button');
+      btn.id = 'xhs-float-btn';
+      btn.textContent = '📱';
+      btn.title = '打开芋圆机(可拖动)';
+      btn.style.cssText = 'position:fixed!important;width:50px;height:50px;border-radius:50%;background:#ff2442;color:#fff;font-size:24px;border:none;cursor:grab;z-index:2000000000!important;box-shadow:0 2px 10px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;line-height:1;padding:0;touch-action:none;-webkit-user-select:none;user-select:none;';
+      let savedPos = null;
+      try { savedPos = JSON.parse(TOP.localStorage.getItem('xhs_yuyuan_fab_pos') || 'null'); } catch (e) {}
+      if (savedPos && typeof savedPos.left === 'number' && typeof savedPos.top === 'number') {
+        btn.style.left = Math.min(Math.max(4, savedPos.left), TOP.innerWidth - 54) + 'px';
+        btn.style.top = Math.min(Math.max(4, savedPos.top), TOP.innerHeight - 54) + 'px';
+        btn.style.right = 'auto'; btn.style.bottom = 'auto';
+      } else {
+        btn.style.right = '16px'; btn.style.bottom = '90px';
+      }
+      try { if (doc.getElementById('xhs-float')) btn.style.display = 'none'; } catch (e) {}
+      doc.body.appendChild(btn);
+      let sx, sy, ox, oy, moved = false, dragging = false;
+      const clmp = (v, a, b) => Math.min(Math.max(v, a), b);
+      const onMove = (e) => {
+        if (!dragging) return;
+        const t = e.touches ? e.touches[0] : e;
+        const dx = t.clientX - sx, dy = t.clientY - sy;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+        if (e.cancelable) e.preventDefault();
+        const w = btn.offsetWidth, h = btn.offsetHeight;
+        btn.style.left = clmp(ox + dx, 4, TOP.innerWidth - w - 4) + 'px';
+        btn.style.top = clmp(oy + dy, 4, TOP.innerHeight - h - 4) + 'px';
+        btn.style.right = 'auto'; btn.style.bottom = 'auto';
+      };
+      const onUp = () => {
+        if (!dragging) return;
+        dragging = false; btn.style.cursor = 'grab';
+        doc.removeEventListener('mousemove', onMove);
+        doc.removeEventListener('touchmove', onMove);
+        doc.removeEventListener('mouseup', onUp);
+        doc.removeEventListener('touchend', onUp);
+        doc.removeEventListener('touchcancel', onUp);
+        if (moved) {
+          const r = btn.getBoundingClientRect();
+          try { TOP.localStorage.setItem('xhs_yuyuan_fab_pos', JSON.stringify({ left: r.left, top: r.top })); } catch (e) {}
+        } else {
+          try { openXhs(); } catch (e) { try { toastr.error('打开失败: ' + e.message); } catch (e2) {} }
+        }
+      };
+      const onDown = (e) => {
+        dragging = true; moved = false; btn.style.cursor = 'grabbing';
+        const t = e.touches ? e.touches[0] : e;
+        sx = t.clientX; sy = t.clientY;
+        const r = btn.getBoundingClientRect();
+        ox = r.left; oy = r.top;
+        doc.addEventListener('mousemove', onMove, { passive: false });
+        doc.addEventListener('touchmove', onMove, { passive: false });
+        doc.addEventListener('mouseup', onUp);
+        doc.addEventListener('touchend', onUp);
+        doc.addEventListener('touchcancel', onUp);
+      };
+      btn.addEventListener('mousedown', onDown);
+      btn.addEventListener('touchstart', onDown, { passive: true });
+      return true;
+    } catch (e) { return false; }
   }
 
   function refreshXhs() {
@@ -6955,24 +7040,42 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     }
   } catch (e) {}
 
-  // 注册失败时浮动按钮兜底
-  if (!cmdOk) {
-    try {
-      const TOP = getTop();
-      const doc = TOP.document;
-      const old = doc.getElementById('xhs-float-btn');
-      if (old) old.remove();
-      const btn = doc.createElement('button');
-      btn.id = 'xhs-float-btn';
-      btn.textContent = '📕';
-      btn.style.cssText = 'position:fixed;bottom:80px;right:16px;width:48px;height:48px;border-radius:50%;background:#ff2442;color:#fff;font-size:22px;border:none;cursor:pointer;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
-      btn.onclick = () => openXhs();
-      doc.body.appendChild(btn);
-    } catch (e) {}
-  }
+  // 酒馆助手「脚本按钮」:在脚本设置的「按键绑定」里加一个按钮(名字用下面任意一个),点它即可打开手机。
+  // 这个按钮由酒馆助手画在它自己的界面里,位置固定,iOS Safari / 手机端比悬浮按钮更可靠。
+  try {
+    if (typeof getButtonEvent === 'function' && typeof eventOn === 'function') {
+      ['芋圆机弹出', '芋圆机', '打开芋圆机', '📱', '打开手机', '小手机', '小红书', '手机'].forEach(nm => {
+        try { eventOn(getButtonEvent(nm), () => { try { openXhs(); } catch (e) { try { toastr.error('打开失败: ' + e.message); } catch (e2) {} } }); } catch (e) {}
+      });
+    }
+  } catch (e) {}
+
+  // 自动注册一个酒馆助手「脚本按钮」(名叫"芋圆机弹出",避免和 QR 同名混淆),免去手动添加;若助手版本没有该接口则跳过(用户仍可手动加)。
+  // replaceScriptButtons 会整体替换【本脚本】的按钮列表(不影响 QR),所以先读现有按钮、清掉旧的"芋圆机"、合并"芋圆机弹出"后再写回,避免覆盖用户其它按钮、且不重复添加。
+  try {
+    if (typeof replaceScriptButtons === 'function') {
+      let cur = [];
+      try { cur = (typeof getScriptButtons === 'function') ? (getScriptButtons() || []) : []; } catch (e) { cur = []; }
+      const hasOld = cur.some(b => b && b.name === '芋圆机');
+      const hasNew = cur.some(b => b && b.name === '芋圆机弹出');
+      if (hasOld || !hasNew) {
+        let next = cur.filter(b => b && b.name !== '芋圆机');
+        if (!next.some(b => b && b.name === '芋圆机弹出')) next.push({ name: '芋圆机弹出', visible: true });
+        replaceScriptButtons(next);
+      }
+    }
+  } catch (e) {}
+
+  // 常驻悬浮启动按钮:手机端脚本加载早、body 可能还没就绪导致按钮没建出来,所以加载时建一次 + DOMContentLoaded + 多次延时重试,确保最终一定出现
+  try { ensureFab(true); } catch (e) {}
+  try {
+    const _T = getTop(); const _doc = _T && _T.document;
+    if (_doc && _doc.readyState === 'loading') _doc.addEventListener('DOMContentLoaded', () => { try { ensureFab(false); } catch (e) {} });
+  } catch (e) {}
+  [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v209 已加载,输入 /yuyuan 打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v218 已加载,点右下角 📱 或输入 /yuyuan 打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

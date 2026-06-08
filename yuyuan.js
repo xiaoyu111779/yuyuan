@@ -1,5 +1,5 @@
 /*!
-// 独立小手机脚本(芋圆机) v218 - 把自动注册的酒馆助手脚本按钮名从'芋圆机'改成'芋圆机弹出'(避免和用户 QR 按钮同名混淆):replaceScriptButtons 写回时先 filter 掉旧的'芋圆机'按钮(v217 自动建的)再确保'芋圆机弹出'存在,只动本脚本自己的按钮、不影响 QR;eventOn 监听列表加上'芋圆机弹出'。点该按钮即开手机。
+// 独立小手机脚本(芋圆机) v225 - 加载 toast 文案改为『📱 芋圆机 vN 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开』(原来提示点右下角悬浮📱,现改为提示斜杠命令或酒馆助手的「芋圆机弹出」脚本按钮,更贴合手机端实际可用入口)。
  * 触发: /yuyuan 打开小红书
  * 功能: 刷帖子、发帖、粉丝群创建+群聊、同步主对话
  * 基于 SillyTavern JS-Slash-Runner
@@ -200,11 +200,58 @@
       d.storyTimeAuto = j.storyTime.trim().slice(0, 40);
     }
   }
+  // 把中文数字/阿拉伯数字转成整数(用于"第N天""X点")
+  function cnNum(s) {
+    s = String(s || '').trim();
+    if (/^\d+$/.test(s)) return parseInt(s);
+    const map = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+    if (s === '十') return 10;
+    if (s.length === 1) return map[s] != null ? map[s] : 0;
+    if (s[0] === '十') return 10 + (map[s[1]] || 0);
+    if (s.includes('十')) { const p = s.split('十'); return (map[p[0]] || 1) * 10 + (p[1] ? (map[p[1]] || 0) : 0); }
+    return map[s] != null ? map[s] : 0;
+  }
+  // 尽力把剧情时间串解析成可比较的数字;完全解析不出返回 null
+  function storyTimeValue(s) {
+    s = String(s || '').trim();
+    if (!s) return null;
+    let found = false, year = 0, month = 0, day = 0, rel = 0, hour = null, min = 0, mm;
+    if ((mm = s.match(/(\d{4})\s*年/))) { year = +mm[1]; found = true; }
+    if ((mm = s.match(/(\d{1,2})\s*月/))) { month = +mm[1]; found = true; }
+    if ((mm = s.match(/(\d{1,2})\s*[日号]/))) { day = +mm[1]; found = true; }
+    if ((mm = s.match(/第\s*([一二三四五六七八九十两\d]+)\s*天/))) { rel = cnNum(mm[1]); found = true; }
+    if ((mm = s.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/))) { hour = +mm[1]; min = +mm[2]; found = true; }
+    else if ((mm = s.match(/([0-2]?\d)\s*点\s*(\d{1,2})?\s*([分半])?/))) { hour = +mm[1]; if (mm[3] === '半') min = 30; else if (mm[2]) min = +mm[2]; found = true; }
+    if (hour == null) {
+      const seg = /凌晨|半夜/.test(s) ? 2 : /清晨|拂晓/.test(s) ? 5 : /早上|早晨|一早/.test(s) ? 7 : /上午/.test(s) ? 9 : /中午|正午/.test(s) ? 12 : /下午/.test(s) ? 15 : /傍晚|黄昏/.test(s) ? 18 : /晚上|夜里|夜晚|今晚|当晚|入夜/.test(s) ? 21 : /深夜/.test(s) ? 23 : null;
+      if (seg != null) { hour = seg; found = true; }
+    } else if (hour < 12 && /(下午|傍晚|黄昏|晚上|夜|今晚|当晚|深夜)/.test(s)) { hour += 12; }
+    if (!found) return null;
+    if (hour == null) hour = 12;
+    const datePart = year * 10000 + month * 100 + day + rel;
+    return datePart * 10000 + hour * 100 + min;
+  }
+  // 按剧情时间稳定重排消息数组(解析不出的沿用前一条时间、贴着邻居,尽量不打乱原顺序)。有变化返回 true
+  function sortChatByStoryTime(arr) {
+    if (!Array.isArray(arr) || arr.length < 2) return false;
+    let lastKey = -Infinity;
+    const keyed = arr.map((m, i) => {
+      let v = storyTimeValue(m && m.st);
+      if (v == null) v = lastKey; else lastKey = v;
+      return { m, i, v };
+    });
+    const sorted = keyed.slice().sort((a, b) => (a.v - b.v) || (a.i - b.i));
+    if (!sorted.some((x, idx) => x.i !== idx)) return false;
+    arr.length = 0;
+    sorted.forEach(x => arr.push(x.m));
+    return true;
+  }
   // 让生成提示词额外要一个 storyTime 字段(仅在开启时)
   function storyTimeAsk(d) {
-    return (d && d.useStoryTime)
-      ? `\n【附加】从上面剧情上下文/摘要里判断"现在剧情进行到的日期时间",放进 storyTime 字段(如"5月20日 周五 19:30"或"第二天清晨";读不出就给"")。`
-      : '';
+    if (!(d && d.useStoryTime)) return '';
+    const prev = (d.storyTimeManual || d.storyTimeAuto || '').trim();
+    const prevLine = prev ? `上一次记录的剧情时间是「${prev}」。剧情时间【只会前进、绝不倒退】:storyTime 必须等于或晚于「${prev}」——剧情确实又过了一段就往后写,没有明显推进就原样保持「${prev}」,【严禁】给出比它更早的时间。` : '';
+    return `\n【附加】从上面剧情上下文/摘要里判断"现在剧情进行到的日期时间",放进 storyTime 字段(如"5月20日 周五 19:30"或"第二天清晨";读不出就给"")。${prevLine}`;
   }
   // 手动按钮:让 AI 从最近剧情读出当前时间
   async function extractStoryTime() {
@@ -1344,6 +1391,36 @@
     refreshXhs();
     toastr.success('已删除');
   }
+  // 改单条消息的剧情时间戳;并可一键设为"当前剧情时间"(锁定,之后不再被 AI 自动改动)
+  async function editMsgTime(idx) {
+    const i = parseInt(idx);
+    if (isNaN(i)) return;
+    const TOP = getTop();
+    let d = loadData();
+    if (!d.useStoryTime) { toastr.info('先在 设置 → 🕐 剧情时间 里开启「时间按剧情走」'); return; }
+    const arr = currentChatArr(d);
+    if (!arr || !arr[i]) { d.routeContext.delIdx = null; await saveData(d); refreshXhs(); return; }
+    const cur = (arr[i].st || effStoryTime(d) || '').trim();
+    const val = TOP.prompt('修改这条消息显示的剧情时间(例:5月20日 周五 19:30):', cur);
+    d = loadData();
+    const arr2 = currentChatArr(d);
+    if (val === null || !arr2 || !arr2[i]) { d.routeContext.delIdx = null; await saveData(d); refreshXhs(); return; }
+    const t = String(val).trim().slice(0, 40);
+    arr2[i].st = t;
+    d.routeContext.delIdx = null;
+    const reordered = sortChatByStoryTime(arr2);
+    await saveData(d);
+    refreshXhs();
+    if (t && TOP.confirm(`要把「${t}」设为【当前剧情时间】吗?\n\n设了之后:之后所有新消息/新帖都从这个时间起算,并【锁定】不再被 AI 自动改动(可解决时间忽前忽后的问题)。\n点"取消"则只改这一条。`)) {
+      const d2 = loadData();
+      d2.storyTimeManual = t;
+      await saveData(d2);
+      refreshXhs();
+      toastr.success('已改这条 + 锁定当前剧情时间为 ' + t + (reordered ? ',并按时间重排' : ''));
+    } else {
+      toastr.success('已改这条消息的时间' + (reordered ? ',并按时间重排' : ''));
+    }
+  }
   async function msgMulti(idx) {
     const i = parseInt(idx);
     const d = loadData();
@@ -1352,7 +1429,7 @@
     d.routeContext.delSel = isNaN(i) ? [] : [i];
     await saveData(d);
     refreshXhs();
-    toastr.info('点消息勾选,再点"删除"');
+    toastr.info('点消息勾选,再点底部"删除"或"改时间"');
   }
   // 引用某条消息:记下"谁说的+内容"放进输入栏,发出去时挂到新消息上
   async function msgQuote(idx) {
@@ -1402,6 +1479,34 @@
     await saveData(d);
     refreshXhs();
     toastr.success(`已删除 ${idxs.length} 条`);
+  }
+  // 批量改选中消息的剧情时间;可一键设为"当前剧情时间"(锁定)
+  async function delSelTime() {
+    const TOP = getTop();
+    let d = loadData();
+    if (!d.useStoryTime) { toastr.info('先在 设置 → 🕐 剧情时间 里开启「时间按剧情走」'); return; }
+    const arr = currentChatArr(d);
+    const idxs = (d.routeContext.delSel || []).slice();
+    if (!arr || !idxs.length) { toastr.info('先勾选要改时间的消息'); return; }
+    const val = TOP.prompt(`把选中的 ${idxs.length} 条消息的剧情时间统一改成(例:5月20日 周五 19:30):`, '');
+    if (val === null) return;
+    const t = String(val).trim().slice(0, 40);
+    d = loadData();
+    const arr2 = currentChatArr(d);
+    if (!arr2) return;
+    let n = 0;
+    idxs.forEach(i => { if (arr2[i]) { arr2[i].st = t; n++; } });
+    d.routeContext.delSelMode = false;
+    d.routeContext.delSel = [];
+    const reordered = sortChatByStoryTime(arr2);
+    await saveData(d);
+    refreshXhs();
+    if (t && TOP.confirm(`已改 ${n} 条${reordered ? '并按时间重排' : ''}。要把「${t}」设为【当前剧情时间】吗?\n\n设了之后新消息/新帖都从这个时间起算并【锁定】,不再被 AI 自动改动。点"取消"则只改这几条。`)) {
+      const d2 = loadData(); d2.storyTimeManual = t; await saveData(d2); refreshXhs();
+      toastr.success(`已批量改 ${n} 条 + 锁定当前剧情时间为 ${t}`);
+    } else {
+      toastr.success(`已把 ${n} 条改为 ${t || '(空)'}${reordered ? ',并按时间重排' : ''}`);
+    }
   }
   async function setDmAvatar(dmId) {
     const TOP = getTop(); const d = loadData();
@@ -2176,7 +2281,7 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
           <span class="xhs-view-author-name">${esc(authorDisp)}${isCharAcct(authorDisp, d) ? charBadge() : ''}</span>
         </div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-          ${isMine ? `<button class="xhs-del-btn" data-action="del-post" data-id="${post.id}">删除</button>` : `<button class="xhs-follow-btn ${followed ? 'xhs-followed' : ''}" data-action="${followed ? 'unfollow-user' : 'follow-user'}" data-name="${esc(post.author)}">${followed ? '已关注' : '关注'}</button>`}
+          ${isMine ? `<button class="xhs-del-btn" data-action="del-post" data-id="${post.id}">删除</button>` : `<button class="xhs-follow-btn ${followed ? 'xhs-followed' : ''}" data-action="${followed ? 'unfollow-user' : 'follow-user'}" data-name="${esc(post.author)}">${followed ? '已关注' : '关注'}</button><button class="xhs-del-btn" data-action="del-post" data-id="${post.id}">删除</button>`}
           <button class="xhs-icon-btn" data-action="forward-post" data-id="${post.id}" title="转发"><svg viewBox="0 0 24 24" fill="none"><path d="M14 4l7 6-7 6v-3.5C9 12.5 6 14 4 19c-.5-6 2.5-10 10-10.5V4z" stroke="#333" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
         </div>
       </div>
@@ -2189,6 +2294,9 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
           <div class="xhs-post-meta">${stTimeLabel(d, post)} · ${formatLikes(post.likes || 0)} 赞 · ${total} 评论</div>
         </div>
         <div class="xhs-post-tools">
+          <button class="xhs-tool-btn" data-action="edit-post-body" data-id="${post.id}" title="编辑正文">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M14.5 5.5l4 4M4 20l1-4L16 5l3 3L8 19l-4 1z" stroke="#7c8aa0" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
+          </button>
           <button class="xhs-tool-btn" data-action="gen-comments" data-id="${post.id}" title="${total ? '再生成一轮评论' : '生成大家的评论'}">
             <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z" fill="#7c8aa0"/><circle cx="18" cy="17" r="2.4" stroke="#7c8aa0" stroke-width="1.4"/><path d="M18 15.6v2.8M16.6 17h2.8" stroke="#7c8aa0" stroke-width="1.2" stroke-linecap="round"/></svg>
           </button>
@@ -3193,15 +3301,33 @@ ${charXhsStyleLine(d)}${role ? `角色设定: ${role}\n` : ''}${cworld ? `世界
     toastr.success('✓ 已重置:小红书帖子/评论/粉丝群/陌生私信已清;微信好友、群、设置全部保留');
   }
 
+  // 编辑任意帖子的正文内容(自己的/路人/char/同人文都可)
+  async function editPostBody(id) {
+    const TOP = getTop();
+    const d = loadData();
+    const post = (d.myPosts || []).find(p => p.id === id) || (d.ficFeed || []).find(p => p.id === id) || (d.feed || []).find(p => p.id === id);
+    if (!post) return toastr.info('找不到这篇笔记');
+    const cur = String(post.content || '');
+    const val = TOP.prompt('编辑这篇笔记的正文内容:', cur);
+    if (val === null) return;
+    post.content = String(val).slice(0, 5000);
+    await saveData(d);
+    refreshXhs();
+    toastr.success('正文已更新');
+  }
+
   async function deletePost(id) {
     const TOP = getTop();
     const d = loadData();
-    const post = (d.myPosts || []).find(p => p.id === id);
-    if (!post) return toastr.info('只能删除自己发的笔记');
-    if (!TOP.confirm(`确定删除「${post.title || '这篇笔记'}」?删除后不可恢复。`)) return;
+    const inMine = (d.myPosts || []).some(p => p.id === id);
+    const post = (d.myPosts || []).find(p => p.id === id) || (d.ficFeed || []).find(p => p.id === id) || (d.feed || []).find(p => p.id === id);
+    if (!post) return toastr.info('找不到这篇笔记');
+    if (!TOP.confirm(`确定删除「${post.title || post.coverText || '这篇笔记'}」?删除后不可恢复。`)) return;
     d.myPosts = (d.myPosts || []).filter(p => p.id !== id);
-    if (d.currentRoute === 'view' && d.routeContext.postId === id) {
-      d.currentRoute = 'profile';
+    d.feed = (d.feed || []).filter(p => p.id !== id);
+    d.ficFeed = (d.ficFeed || []).filter(p => p.id !== id);
+    if (d.currentRoute === 'view' && d.routeContext && d.routeContext.postId === id) {
+      d.currentRoute = inMine ? 'profile' : 'feed';
       d.routeContext = {};
     }
     await saveData(d);
@@ -3571,7 +3697,7 @@ ${xhsNameRule()}
           ${(!isMe && opts.showName) ? `<div class="xhs-cmsg-name">${esc(who)}</div>` : ''}
           ${quoteBlock}
           ${inner}
-          ${(opts.idx != null && opts.delIdx === opts.idx) ? `<div class="xhs-msg-menu"><button data-action="msg-quote" data-idx="${opts.idx}">引用</button><button data-action="del-msg" data-idx="${opts.idx}">删除</button><button data-action="msg-multi" data-idx="${opts.idx}">多选</button></div>` : ''}
+          ${(opts.idx != null && opts.delIdx === opts.idx) ? `<div class="xhs-msg-menu"><button data-action="msg-quote" data-idx="${opts.idx}">引用</button>${d.useStoryTime ? `<button data-action="msg-time" data-idx="${opts.idx}">改时间</button>` : ''}<button data-action="del-msg" data-idx="${opts.idx}">删除</button><button data-action="msg-multi" data-idx="${opts.idx}">多选</button></div>` : ''}
         </div>
       </div>`;
   }
@@ -3763,7 +3889,10 @@ ${xhsNameRule()}
         <div class="xhs-grp-chat" id="xhs-grp-chat">${delBubbles}</div>
         <div class="wx-sel-bar">
           <span>已选 ${delSet.size} 条</span>
-          <button class="xhs-publish-btn" data-action="del-sel-confirm" data-id="${id}" style="background:#ff2442${delSet.size ? '' : ';opacity:.5'}" ${delSet.size ? '' : 'disabled'}>删除(${delSet.size})</button>
+          <div style="display:flex;gap:8px">
+            ${d.useStoryTime ? `<button class="xhs-publish-btn" data-action="del-sel-time" data-id="${id}" style="background:#7c8aa0${delSet.size ? '' : ';opacity:.5'}" ${delSet.size ? '' : 'disabled'}>改时间</button>` : ''}
+            <button class="xhs-publish-btn" data-action="del-sel-confirm" data-id="${id}" style="background:#ff2442${delSet.size ? '' : ';opacity:.5'}" ${delSet.size ? '' : 'disabled'}>删除(${delSet.size})</button>
+          </div>
         </div>`;
     }
     // 选消息发到小红书(复用 DM 的 wxSelect 模式)
@@ -4351,7 +4480,10 @@ ${recentChat}
         <div class="xhs-grp-chat" id="xhs-grp-chat">${delBubbles}</div>
         <div class="wx-sel-bar">
           <span>已选 ${delSet.size} 条</span>
-          <button class="xhs-publish-btn" data-action="del-sel-confirm" data-id="${dm.id}" style="background:#ff2442${delSet.size ? '' : ';opacity:.5'}" ${delSet.size ? '' : 'disabled'}>删除(${delSet.size})</button>
+          <div style="display:flex;gap:8px">
+            ${d.useStoryTime ? `<button class="xhs-publish-btn" data-action="del-sel-time" data-id="${dm.id}" style="background:#7c8aa0${delSet.size ? '' : ';opacity:.5'}" ${delSet.size ? '' : 'disabled'}>改时间</button>` : ''}
+            <button class="xhs-publish-btn" data-action="del-sel-confirm" data-id="${dm.id}" style="background:#ff2442${delSet.size ? '' : ';opacity:.5'}" ${delSet.size ? '' : 'disabled'}>删除(${delSet.size})</button>
+          </div>
         </div>`;
     }
     return `
@@ -5838,6 +5970,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'regen-cmt-reply': await regenCommentReply(id, $btn.data('cid')); break;
           case 'do-publish': await doPublish(); break;
           case 'del-post': await deletePost(id); break;
+          case 'edit-post-body': await editPostBody(id); break;
           case 'clear-feed': await clearFeed(); break;
           case 'reset-xhs': await resetXhsContent(); break;
           case 'group-menu': await toggleGroupMenu(); break;
@@ -5916,6 +6049,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'set-wx-remark': await setWxRemark(id); break;
           case 'set-dm-avatar': await setDmAvatar(id); break;
           case 'del-msg': await delChatMsg($btn.data('idx')); break;
+          case 'msg-time': await editMsgTime($btn.data('idx')); break;
           case 'read-story-time': await extractStoryTime(); break;
           case 'del-comment': await delComment(id, $btn.data('cid')); break;
           case 'cmt-multi': await cmtMulti(id, $btn.data('cid')); break;
@@ -5928,6 +6062,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'del-sel-toggle': await delSelToggle($btn.data('idx')); break;
           case 'del-sel-cancel': await delSelCancel(); break;
           case 'del-sel-confirm': await delSelConfirm($btn.data('id')); break;
+          case 'del-sel-time': await delSelTime(); break;
           case 'wx-start-select': await startWxSelect(id); break;
           case 'wx-online-persona': await setWxOnline(id); break;
           case 'reveal-lurk-name': await revealLurkName(); break;
@@ -6556,9 +6691,9 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
       .xhs-heart-bub { max-width: 80%; background: rgba(155,109,255,.08); border: 1px dashed #c3a6f5; border-radius: 12px; padding: 8px 12px; color: #6a4bb0; font-size: 13px; font-style: italic; }
       .xhs-heart-tag { font-size: 10px; font-style: normal; color: #9b6dff; background: rgba(155,109,255,.14); border-radius: 8px; padding: 1px 6px; margin-left: 2px; }
       .xhs-heart-text { margin-top: 5px; line-height: 1.45; }
-      .xhs-msg-menu { margin-top: 5px; display: inline-flex; background: #4b4b4d; border-radius: 9px; overflow: hidden; align-self: flex-start; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+      .xhs-msg-menu { margin-top: 5px; display: inline-flex; flex-wrap: wrap; background: #4b4b4d; border-radius: 9px; overflow: hidden; align-self: flex-start; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
       .xhs-cmsg-me .xhs-msg-menu { align-self: flex-end; }
-      .xhs-msg-menu button { background: none; border: none; color: #fff; font-size: 13px; padding: 8px 16px; cursor: pointer; }
+      .xhs-msg-menu button { background: none; border: none; color: #fff; font-size: 13px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
       .xhs-msg-menu button + button { border-left: 1px solid rgba(255,255,255,.18); }
       .xhs-quote-ref { font-size: 12px; color: #8a8a8a; background: rgba(0,0,0,.06); border-left: 3px solid #c4ccdb; border-radius: 4px; padding: 4px 8px; margin-bottom: 4px; max-width: 100%; line-height: 1.4; word-break: break-word; }
       .xhs-quote-ref b { color: #6f7891; font-weight: 600; }
@@ -7075,7 +7210,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v218 已加载,点右下角 📱 或输入 /yuyuan 打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v225 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

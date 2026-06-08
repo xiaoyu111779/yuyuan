@@ -1,5 +1,5 @@
 /*!
-// 独立小手机脚本(芋圆机) v225 - 加载 toast 文案改为『📱 芋圆机 vN 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开』(原来提示点右下角悬浮📱,现改为提示斜杠命令或酒馆助手的「芋圆机弹出」脚本按钮,更贴合手机端实际可用入口)。
+// 独立小手机脚本(芋圆机) v231 - 修帖子详情页顶栏帖主名字被关注/删除按钮挤到换行:.xhs-view-author 加 min-width:0(可收缩),.xhs-view-author-name 加 overflow:hidden+text-overflow:ellipsis+white-space:nowrap(名字占满可用宽度、超长省略号、不换行),.xhs-view-avatar 加 flex-shrink:0,右侧关注/删除按钮组加 flex-shrink:0(固定不收缩、不把名字挤到第二行)。
  * 触发: /yuyuan 打开小红书
  * 功能: 刷帖子、发帖、粉丝群创建+群聊、同步主对话
  * 基于 SillyTavern JS-Slash-Runner
@@ -182,8 +182,22 @@
     return fmtTime(ts);
   }
   // 会话列表的时间:开了剧情时间→优先最后一条消息存的剧情戳,其次当前剧情时间,否则相对时间
+  // 列表里把长剧情时间压成短标签(详情页里仍显示完整 st)
+  function shortStoryLbl(s) {
+    s = String(s || '').trim();
+    if (!s) return '';
+    let m = s.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
+    if (m) return `${m[1]}月${m[2]}日`;
+    m = s.match(/第\s*[一二三四五六七八九十两\d]+\s*天/);
+    if (m) return m[0].replace(/\s/g, '');
+    m = s.match(/(\d{1,2})\s*[:：]\s*(\d{2})/);
+    if (m) return `${m[1]}:${m[2]}`;
+    m = s.match(/清晨|早上|早晨|上午|中午|下午|傍晚|晚上|深夜|凌晨|夜里|周[一二三四五六日天]/);
+    if (m) return m[0];
+    return s.length > 6 ? s.slice(0, 6) + '…' : s;
+  }
   function chatListTimeLbl(d, st, ts) {
-    if (d && d.useStoryTime) { if (st) return String(st); const e = effStoryTime(d); if (e) return e; }
+    if (d && d.useStoryTime) { if (st) return shortStoryLbl(st); const e = effStoryTime(d); if (e) return shortStoryLbl(e); }
     return fmtTime(ts);
   }
   // 聊天里:当某条消息的剧情时间和上一条不同,在它上面插一条居中时间(微信风格)
@@ -2280,7 +2294,7 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
           <div class="xhs-card-avatar xhs-view-avatar">${avatarFor(d, authorDisp, { bg: authorColor, url: (isMine && d.userAvatar) ? d.userAvatar : '' })}</div>
           <span class="xhs-view-author-name">${esc(authorDisp)}${isCharAcct(authorDisp, d) ? charBadge() : ''}</span>
         </div>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0">
           ${isMine ? `<button class="xhs-del-btn" data-action="del-post" data-id="${post.id}">删除</button>` : `<button class="xhs-follow-btn ${followed ? 'xhs-followed' : ''}" data-action="${followed ? 'unfollow-user' : 'follow-user'}" data-name="${esc(post.author)}">${followed ? '已关注' : '关注'}</button><button class="xhs-del-btn" data-action="del-post" data-id="${post.id}">删除</button>`}
           <button class="xhs-icon-btn" data-action="forward-post" data-id="${post.id}" title="转发"><svg viewBox="0 0 24 24" fill="none"><path d="M14 4l7 6-7 6v-3.5C9 12.5 6 14 4 19c-.5-6 2.5-10 10-10.5V4z" stroke="#333" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
         </div>
@@ -2305,6 +2319,9 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
           </button>` : ''}
           ${isMine && d.charSeesPosts ? `<button class="xhs-tool-btn" data-action="react-as-char" data-id="${post.id}" title="让 ${esc(charDisplayName(d))} 刷到并回应这篇">
             <svg viewBox="0 0 24 24" fill="none" stroke="#7c8aa0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5C6.5 16.5 3 13.4 3 9.2 3 6.4 5.2 4.5 7.6 4.5c1.6 0 3.2.8 4.4 2.3 1.2-1.5 2.8-2.3 4.4-2.3C18.8 4.5 21 6.4 21 9.2c0 4.2-3.5 7.3-9 11.3z"/></svg>
+          </button>` : ''}
+          ${(post.author === charDisplayName(d) || (isMine && d.charSeesPosts)) ? `<button class="xhs-tool-btn" data-action="char-reply-comments" data-id="${post.id}" title="让 ${esc(charDisplayName(d))} 回评论区(楼主必回+挑几条路人)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#7c8aa0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 01-12.4 7.6L3 21l1.9-5.6A8.5 8.5 0 1121 11.5z"/><path d="M12.5 8.5L10 11l2.5 2.5"/><path d="M10 11h3.2a2.3 2.3 0 012.3 2.3v.4"/></svg>
           </button>` : ''}
         </div>
         <div class="xhs-comment-section">
@@ -3104,6 +3121,89 @@ ${knows ? '' : suspEvalRule(d)}${stickerHintLine(d)}想配图(比如你拍的照
     toastr.success(`✓ ${cname} 有反应了${!knows ? ' · 怀疑度' + fresh.charSuspicion : ''}`);
   }
 
+  // char 一键回复某帖评论区:楼主(你)的评论必回 + 随机挑几条 NPC 评论回;只回还没被 char 回过的,带人设、批量一次生成
+  async function charReplyComments(postId) {
+    let d = loadData();
+    const cname = charDisplayName(d);
+    const userName = d.userName;
+    const post = (d.myPosts || []).find(p => p.id === postId) || (d.feed || []).find(p => p.id === postId) || (d.ficFeed || []).find(p => p.id === postId);
+    if (!post) return toastr.info('找不到这篇笔记');
+    const tops = post.comments || [];
+    // 表情存的是 URL,反查成名字让 char 读得懂
+    const urlName = {}; (d.stickers || []).forEach(s => { if (s && s.url) urlName[s.url] = s.name; });
+    const cdesc = c => c.text || (c.img ? `[图片:${c.img}]` : (c.sticker ? `[表情${urlName[c.sticker] ? ':' + urlName[c.sticker] : ''}]` : ''));
+    // char 是否已在某楼层回过 author 这条(顶层评论按 reply_to===author 或无 reply_to 视为回顶层)
+    const charRepliedTo = (top, author) => (top.replies || []).some(x => (x.isChar || isCharAcct(x.author, d)) && (x.reply_to === author || (!x.reply_to && author === top.author)));
+    // 收集可回复的评论:顶层 + 楼层内嵌套回复(含 ↻ 之后冒出的围观 NPC),跳过 char 自己的、以及 char 已回过的那一条
+    const items = [];
+    tops.forEach(top => {
+      if (top.author && top.author !== cname && !isCharAcct(top.author, d) && !charRepliedTo(top, top.author)) {
+        items.push({ c: top, topId: top.id, isUser: top.author === userName });
+      }
+      (top.replies || []).forEach(r => {
+        if (!r.author || r.author === cname || isCharAcct(r.author, d) || r.isChar) return;
+        if (charRepliedTo(top, r.author)) return;
+        items.push({ c: r, topId: top.id, isUser: r.author === userName });
+      });
+    });
+    const userCmts = items.filter(x => x.isUser).slice(0, 4);
+    const npcCmts = items.filter(x => !x.isUser).sort(() => Math.random() - 0.5).slice(0, 3);
+    const targets = [...userCmts, ...npcCmts];
+    if (!targets.length) return toastr.info('评论区没有需要回复的新评论了');
+    toastr.info(`${cname} 正在回复评论区…`);
+    const knows = d.charKnowsAlt === 'knows';
+    const role = getRoleDesc();
+    const plot = await buildContextSnippet();
+    const cworld = getWorldSetting();
+    const wb = (await getWorldbookContent()) || '';
+    const isCharP = post.author === cname;
+    const postCtx = post.type === 'image'
+      ? `这是${isCharP ? '你发的' : '楼主发的'}图片笔记,配图画面「${(post.coverText || post.title || '').trim()}」,正文「${post.content}」`
+      : `${isCharP ? '你发的' : '楼主的'}帖子:标题「${post.title}」 正文「${post.content}」`;
+    const list = targets.map((x, i) => `${i + 1}. ${x.isUser ? `【楼主${knows ? '(就是 {{user}} 本人)' : '(一个评论你的账号)'}·必回】` : ''}${x.c.author}: ${cdesc(x.c)}`).join('\n');
+    const sys = `你扮演「${cname}」本人,在小红书${isCharP ? '【你自己发的这条笔记】' : '一条笔记'}的评论区里挨条回复读者评论。
+${charXhsStyleLine(d)}${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${cworld}\n` : ''}${wb ? `世界书/相关资料: ${wb}\n` : ''}${plot ? `${knows ? '当前你和 ta 的剧情' : '你私下知道的剧情(用来判断"楼主"那个账号是不是 ta)'}: ${plot}\n` : ''}${charPhoneMemory(d, { exclComment: true, surface: 'xhs' })}
+${postCtx}
+要回复的评论(按编号):
+${list}
+要求:
+- 标【必回】的(楼主)【必须】回,贴合你和 ta 当前剧情里的关系与称呼,别凭空升温也别端着。
+- 其余路人评论挑你想搭理的回(口语短句、完全贴合人设、可调侃/玩梗/敷衍);实在没什么可说的那条可以不回(就别给那个编号)。
+- 每条只回一句,会自动挂"回复对方"。
+- 有的评论带了图片(写成 [图片:画面描述])或表情(写成 [表情:名]),回复时可以【针对那张图的内容/那个表情】来接话,显得你真的看到了。
+${stickerHintLine(d)}${storyTimeAsk(d)}
+严格 JSON,不要解释: {"replies":[{"n":编号,"text":"回复内容","sticker":"表情名(可选,不发就省略)"}]}`;
+    const raw = await callXhsAPI(sys, `${cname} 回复评论区`, { noContext: true });
+    if (!raw) return;
+    const j = tryParseJSON(raw, { replies: [] });
+    d = loadData();
+    const fpost = (d.myPosts || []).find(p => p.id === postId) || (d.feed || []).find(p => p.id === postId) || (d.ficFeed || []).find(p => p.id === postId);
+    if (!fpost) return;
+    const ftops = fpost.comments || [];
+    const stkMap = stickerUrlMap(d);
+    applyAutoStoryTime(d, j);
+    let n = 0;
+    (j.replies || []).forEach(r => {
+      const x = targets[parseInt(r.n) - 1];
+      if (!x || !r.text) return;
+      const ft = ftops.find(t => t.id === x.topId);
+      if (!ft) return;
+      const author = x.c.author;
+      ft.replies = ft.replies || [];
+      // 精确防重:只跳过 char 已回过【这条】的(同楼层 reply_to===该作者),不再整层跳过
+      if (ft.replies.some(y => (y.isChar || isCharAcct(y.author, d)) && y.reply_to === author)) return;
+      const stk = (r.sticker && stkMap[r.sticker]) ? stkMap[r.sticker] : null;
+      ft.replies.push({ id: uid(), author: cname, text: String(r.text).trim(), sticker: stk, reply_to: author, isChar: true, likes: Math.floor(Math.random() * 40), liked: false, time: Date.now(), st: stStamp(d), location: pickLoc() });
+      if (author === userName) addNotif(d, { kind: 'postcomment', author: cname, isChar: true, text: String(r.text).trim(), replyTo: fpost.title, postId: fpost.id });
+      n++;
+    });
+    if (!n) { toastr.info(`${cname} 这次没接话`); return; }
+    await saveData(d);
+    refreshOnView(dd => dd.currentRoute === 'view' && dd.routeContext && dd.routeContext.postId === postId);
+    toastr.success(`${cname} 回复了 ${n} 条评论`);
+    try { await syncToMain(`[小红书]${postRef(fpost, d)} 评论区:{{char}} 回复了 ${n} 条评论`, d.syncHidden); } catch (e) {}
+  }
+
   async function resetSusp() {
     const d = loadData();
     d.charSuspicion = 0;
@@ -3195,6 +3295,8 @@ ${charXhsStyleLine(d)}${role ? `角色设定: ${role}\n` : ''}${cworld ? `世界
     toastr.success(`✓ ${cname} 发了动态,正在生成评论…`);
     // 自动生成这条动态的 NPC 评论,不用再手点
     await generatePostComments(post.id);
+    // 像历史帖一样,char 发完帖顺手回几条评论区里的评论
+    await charReplyComments(post.id);
   }
 
   // 打开/创建与 char 的私信
@@ -3327,8 +3429,9 @@ ${charXhsStyleLine(d)}${role ? `角色设定: ${role}\n` : ''}${cworld ? `世界
     d.feed = (d.feed || []).filter(p => p.id !== id);
     d.ficFeed = (d.ficFeed || []).filter(p => p.id !== id);
     if (d.currentRoute === 'view' && d.routeContext && d.routeContext.postId === id) {
-      d.currentRoute = inMine ? 'profile' : 'feed';
-      d.routeContext = {};
+      const vb = d.viewBack;
+      if (vb && vb.route && vb.route !== 'view') { d.currentRoute = vb.route; d.routeContext = vb.ctx || {}; }
+      else { d.currentRoute = inMine ? 'profile' : 'feed'; d.routeContext = {}; }
     }
     await saveData(d);
     refreshXhs();
@@ -5994,6 +6097,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'send-sticker': await sendSticker($btn.data('kind'), id, $btn.data('url'), $btn.data('name')); break;
           case 'boost-group': await boostGroupFromPost(id); break;
           case 'react-as-char': await reactAsChar(id); break;
+          case 'char-reply-comments': await charReplyComments(id); break;
           case 'reveal-alt': await revealAlt(); break;
           case 'reset-susp': await resetSusp(); break;
           case 'reveal-lurk': await revealLurk(); break;
@@ -6420,10 +6524,10 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
       }
       .xhs-view-author {
         display: flex; align-items: center; gap: 6px;
-        flex: 1;
+        flex: 1; min-width: 0;
       }
-      .xhs-view-avatar { width: 28px; height: 28px; font-size: 12px; }
-      .xhs-view-author-name { font-size: 14px; font-weight: 500; }
+      .xhs-view-avatar { width: 28px; height: 28px; font-size: 12px; flex-shrink: 0; }
+      .xhs-view-author-name { font-size: 14px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .xhs-follow-btn {
         background: #ff2442; color: #fff; border: none;
         padding: 5px 14px; border-radius: 14px;
@@ -6978,9 +7082,9 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
         font-size: 18px; flex-shrink: 0;
       }
       .xhs-msg-info { flex: 1; min-width: 0; }
-      .xhs-msg-top { display: flex; justify-content: space-between; align-items: baseline; }
-      .xhs-msg-name { font-size: 15px; font-weight: 500; color: #222; }
-      .xhs-msg-time { font-size: 11px; color: #bbb; flex-shrink: 0; }
+      .xhs-msg-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+      .xhs-msg-name { font-size: 15px; font-weight: 500; color: #222; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .xhs-msg-time { font-size: 11px; color: #bbb; flex-shrink: 0; white-space: nowrap; }
       .xhs-msg-preview { font-size: 13px; color: #999; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .xhs-msg-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff2442; flex-shrink: 0; }
 
@@ -7210,7 +7314,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v225 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v231 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

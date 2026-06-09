@@ -2010,7 +2010,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
   function stickerHintLine(d) {
     const names = (d.stickers || []).map(s => s.name).filter(Boolean);
     const base = `\n【表情】想表达情绪就用【真 emoji】(🙂😂🥺😏🙄…),【别打「[微笑]」「[捂脸]」这种方括号文字码】。`;
-    const stk = names.length ? `聊到开心/调侃/害羞/无语/想活跃气氛时,就【大方地】发表情包,像真人聊天那样常用(不必每条都发,但该发就发、别一连串只发表情刷屏);可用表情:${names.join('、')};想发就在 JSON 里加 "sticker":"表情名"(必须从列表里原样选一个;不发就别加这个字段)。` : '';
+    const stk = names.length ? `\n【表情包·私聊要常用】聊到开心/调侃/害羞/无语/撒娇/想活跃气氛时,就【大方发表情包】,像真人发微信/私信那样常用——尤其私下、暧昧、熟络的对话更要发。【发法】:把表情【单独作为 texts 数组里的一条】,原样写成「[表情:表情名]」(表情名必须从这些里【原样】挑一个:${names.join('、')}),解析时会自动变成表情。该发就发、可以和文字穿插,但别一连串只刷表情。` : '';
     return base + stk;
   }
   function stickerUrlMap(d) { const m = {}; (d.stickers || []).forEach(s => { if (s && s.name) m[s.name] = s.url; }); return m; }
@@ -3693,6 +3693,42 @@ ${ctx}`;
     refreshXhs();
     toastr.success(`已取消小号标记,「${dm.name}」变回普通陌生人`);
   }
+  // 双盲小号:小号主人(char/出场角色)知不知道"对面这个陌生账号其实是 user"
+  function altDoesntKnow(dm) { return !!(dm && dm.altWatch && dm.altWatch.knows === 'unknown'); }
+  function altOwnerName(d, dm) { return dm.castAlt ? ((castOf(d, dm) || {}).name || 'ta') : charDisplayName(d); }
+  async function toggleAltWatch(dmId) {
+    const TOP = getTop();
+    const d = loadData();
+    const dm = (d.dms || []).find(x => x.id === dmId);
+    if (!dm || !(dm.charAlt || dm.castAlt)) return;
+    const ownerName = altOwnerName(d, dm);
+    if (d.routeContext) d.routeContext.dmMenuOpen = false;
+    if (altDoesntKnow(dm)) {
+      if (!TOP.confirm(`把小号「${dm.name}」的主人改回"知道对面是你"?\nta 会恢复成"心里清楚对面就是你、只是瞒着自己身份"(怀疑度 ${dm.altWatch.susp || 0} 作废)。`)) return;
+      dm.altWatch = null;
+      await saveData(d); refreshXhs();
+      toastr.success(`「${dm.name}」的主人现在【知道】对面是你(只瞒自己身份)`);
+    } else {
+      if (!TOP.confirm(`让小号「${dm.name}」的主人(${ownerName})也【不知道】对面是你?\n变成"双盲":你不知道这小号是 ${ownerName},ta 也不知道你是 ${d.userName}——ta 把你当陌生人,从内容里慢慢起疑(怀疑度从 0 开始)。`)) return;
+      dm.altWatch = { name: ownerName, knows: 'unknown', susp: 0, clues: [], suspSens: '正常' };
+      await saveData(d); refreshXhs();
+      toastr.success(`双盲已开:${ownerName} 用小号「${dm.name}」跟你聊,但 ta 不知道对面是你`);
+    }
+  }
+  async function revealAltWatch(dmId) {
+    const TOP = getTop();
+    const d = loadData();
+    const dm = (d.dms || []).find(x => x.id === dmId);
+    if (!dm || !altDoesntKnow(dm)) return;
+    const ownerName = dm.altWatch.name || altOwnerName(d, dm);
+    if (!TOP.confirm(`让「${ownerName}」(小号「${dm.name}」的主人)当场认出"对面这个陌生人其实是 ${d.userName}"?会写进主线。`)) return;
+    const sp = dm.altWatch.susp || 0;
+    dm.altWatch.knows = 'knows';
+    if (d.routeContext) d.routeContext.dmMenuOpen = false;
+    await saveData(d); refreshXhs();
+    await forceSyncToMain(`[小红书·私信] ${dm.castAlt ? `出场角色「${ownerName}」` : '{{char}}'} 用小号「${dm.name}」跟一个"陌生人"聊着,突然认出:对面其实就是 {{user}} 本人(此前一直当陌生人,怀疑度 ${sp}/100)。身份就此挑明(但 {{user}} 这边仍不一定知道这小号是 ${ownerName})。`);
+    toastr.success(`${ownerName} 认出对面是你了(已写进主线)`);
+  }
   // 新建小号:给 char(单人卡)或某出场角色(多人卡)凭空建一个假名小号——主线没提过也能建
   async function createAlt() {
     const TOP = getTop();
@@ -3719,6 +3755,8 @@ ${ctx}`;
     else { dm.charAlt = true; dm.charAltRevealed = false; }
     const lurk = TOP.confirm(`要不要也让小号「${alias}」潜进你的粉丝群?\n(同一个马甲:既私聊你、又在群里围观。点"取消"=只私聊)`);
     if (lurk) { if (multi) dm.castAltLurk = true; else dm.charAltLurk = true; }
+    const blindNo = TOP.confirm(`小号主人「${ownerName}」知道对面是你吗?\n点"确定"=知道(ta 心里清楚是你、只瞒自己身份,常规款);\n点"取消"=不知道(双盲:ta 也把你当陌生人,慢慢起疑)。`);
+    if (!blindNo) dm.altWatch = { name: ownerName, knows: 'unknown', susp: 0, clues: [], suspSens: '正常' };
     const wantOpener = TOP.confirm(`要不要让「${ownerName}」用这个小号【主动先发一条搭讪私信】?\n(会参考你小红书最近发的帖子,像 ta 刷到你来搭话。点"取消"=你自己先开口)`);
     d.dms.unshift(dm);
     d.currentApp = 'xhs';
@@ -5991,7 +6029,7 @@ ${recentChat}
         ${(isWx && dm.isChar) ? `<button data-action="import-wx-char" data-id="${dm.id}">📥 从主线导入 ta 发的消息</button>` : ''}
         ${(dm.castId && !dm.castAlt) ? `<button data-action="import-cast-msgs" data-id="${dm.id}">📥 从主线导入 ta 发的消息</button>` : ''}
         ${(dm.castId && !dm.castAlt && !isWx) ? `<button data-action="import-cast-alt" data-id="${dm.castId}">🎭 从主线导入 ta 的小号(伪装)</button>` : ''}
-        ${(dm.castAlt && dm.castId) ? `<button data-action="import-cast-alt" data-id="${dm.castId}">📥 从主线再导入 ta 的小号消息</button><button data-action="toggle-cast-alt-lurk" data-id="${dm.id}">${dm.castAltLurk ? '✓ 已潜入我的粉丝群(点此取消)' : '🫥 也让这小号潜入我的粉丝群'}</button>${dm.castAltRevealed ? '' : `<button data-action="reveal-cast-alt" data-id="${dm.castId}" style="color:#ff2442">🔍 揭穿:这其实是「${esc((castOf(d, dm) || {}).name || '某角色')}」的小号</button>`}<button data-action="unset-cast-alt" data-id="${dm.id}">取消小号标记</button>` : ''}
+        ${(dm.castAlt && dm.castId) ? `<button data-action="import-cast-alt" data-id="${dm.castId}">📥 从主线再导入 ta 的小号消息</button><button data-action="toggle-cast-alt-lurk" data-id="${dm.id}">${dm.castAltLurk ? '✓ 已潜入我的粉丝群(点此取消)' : '🫥 也让这小号潜入我的粉丝群'}</button><button data-action="toggle-alt-watch" data-id="${dm.id}">${altDoesntKnow(dm) ? `🕵️ 小号主人不认识你·疑${dm.altWatch.susp || 0}(点此改回认识)` : '🎭 小号主人认识你(点此改成"也不认识你")'}</button>${altDoesntKnow(dm) ? `<button data-action="reveal-alt-watch" data-id="${dm.id}" style="color:#9b6dff">🔍 让小号主人认出你</button>` : ''}${dm.castAltRevealed ? '' : `<button data-action="reveal-cast-alt" data-id="${dm.castId}" style="color:#ff2442">🔍 揭穿:这其实是「${esc((castOf(d, dm) || {}).name || '某角色')}」的小号</button>`}<button data-action="unset-cast-alt" data-id="${dm.id}">取消小号标记</button>` : ''}
         ${isWx ? `<button data-action="wx-start-select" data-id="${dm.id}">📤 选消息发到小红书</button>` : ''}
         ${(!isWx && dm.isChar) ? `<button data-action="import-xhs-char" data-id="${dm.id}">📥 从主线导入 ta 发的消息</button>` : ''}
         <button data-action="set-chat-bg" data-id="${dm.id}">🎨 设置聊天背景</button>
@@ -5999,7 +6037,7 @@ ${recentChat}
         ${(!dm.isChar && !dm.castId) ? (dm.charAlt
           ? (dm.charAltRevealed
               ? `<button data-action="unset-char-alt" data-id="${dm.id}">取消马甲标记</button>`
-              : `<button data-action="reveal-char-alt" data-id="${dm.id}" style="color:#9b6dff">🔍 揭穿:这其实是 ${esc(charDisplayName(d))} 的小号</button><button data-action="toggle-char-alt-lurk" data-id="${dm.id}">${dm.charAltLurk ? '✓ 已潜入我的粉丝群(点此取消)' : '🫥 也让这小号潜入我的粉丝群'}</button><button data-action="unset-char-alt" data-id="${dm.id}">取消马甲标记</button>`)
+              : `<button data-action="reveal-char-alt" data-id="${dm.id}" style="color:#9b6dff">🔍 揭穿:这其实是 ${esc(charDisplayName(d))} 的小号</button><button data-action="toggle-char-alt-lurk" data-id="${dm.id}">${dm.charAltLurk ? '✓ 已潜入我的粉丝群(点此取消)' : '🫥 也让这小号潜入我的粉丝群'}</button><button data-action="toggle-alt-watch" data-id="${dm.id}">${altDoesntKnow(dm) ? `🕵️ 小号主人不认识你·疑${dm.altWatch.susp || 0}(点此改回认识)` : '🎭 小号主人认识你(点此改成"也不认识你")'}</button>${altDoesntKnow(dm) ? `<button data-action="reveal-alt-watch" data-id="${dm.id}" style="color:#9b6dff">🔍 让小号主人认出你</button>` : ''}<button data-action="unset-char-alt" data-id="${dm.id}">取消马甲标记</button>`)
           : (isMultiCast(d)
               ? ''
               : `<button data-action="set-char-alt" data-id="${dm.id}">🕵 设为 ${esc(charDisplayName(d))} 的马甲</button>`)) : ''}
@@ -6181,6 +6219,11 @@ ${recentChat}
 ${role ? `【${cname} 的人设/性格】:\n${role}\n` : ''}${cworld ? `世界观: ${cworld}\n` : ''}${wb ? `世界书: ${wb}\n` : ''}${plot ? `你们的剧情/近况: ${plot}\n` : ''}
 要求: 只说「${cname}」的话,拆成 1~4 条很短的私信放进 texts,别替对方说话。${stickerHintLine(d)}${styleHint(d, true)}
 严格 JSON,不要解释: {"texts":["短句1","短句2"]}`
+          : altDoesntKnow(dm) ? `你扮演「${cname}」本人(这张多人卡里的出场角色之一)。ta 用一个匿名小号「${dm.name}」在小红书上跟一个陌生账号「${d.userName}」私信聊天。【关键】ta【不知道】对面是谁,更【不知道】是 ta 现实里认识的人——把对方当【素不相识的陌生网友】,绝对别表现得认识 ta(不许私下称呼/私人梗/提 ta 近况);外在反应严格按下面的怀疑档位。
+【${cname} 的人设/性格——严格贴合,绝不 OOC,也别串到卡里其他角色】:\n${role}
+${cworld ? `世界观/背景: ${cworld}\n` : ''}${plot ? `你私下知道的剧情(仅用来对照判断这陌生账号会不会是你认识的人,别因此就认定): ${plot}\n` : ''}${castSuspEvalRule(dm.altWatch)}
+要求: 用「${cname}」本人口吻,拆成 1~4 条很短的私信放进 texts,把对方当陌生人(严格按上面的怀疑档位),别替对方说话。${d.lurkThoughts ? `另外写一句 ta 此刻没说出口的真实内心独白(心声)放进 heart,1~2 句。` : ''}${stickerHintLine(d)}${styleHint(d, true)}
+严格 JSON,不要解释: {"texts":["短句1","短句2"],"clues":[],"evidence":数字${d.lurkThoughts ? ',"heart":"心声"' : ''}}`
           : `你扮演「${cname}」本人(这张多人卡里的出场角色之一)。ta 用一个谁都认不出的小号马甲「${dm.name}」给「${d.userName}」发私信、暗中接近 ta——${d.userName} 以为对面是个陌生人,其实就是 ${cname},但 ${d.userName} 完全不知道。
 【${cname} 的人设/性格/说话习惯——必须严格贴合,绝不 OOC,也别串到卡里其他角色】:\n${role}
 ${cworld ? `世界观/背景: ${cworld}\n` : ''}${plot ? `【${cname} 私下知道的主线剧情/和 ${d.userName} 的过往(可暗暗化用、借题发挥,但别直说破)】:\n${plot}\n` : ''}
@@ -6236,6 +6279,11 @@ ${charXhsStyleLine(d)}${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? 
 ${charXhsStyleLine(d)}${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观: ${cworld}\n` : ''}${wb ? `世界书: ${wb}\n` : ''}${plot ? `你们的剧情/近况: ${plot}\n` : ''}${charPhoneMemory(d, { exclDmId: dm.id, surface: 'xhs' })}
 要求: 只说「${cname}」的话,拆成 1~4 条很短的私信放进 texts,别替对方说话。${stickerHintLine(d)}${styleHint(d, true)}
 严格 JSON,不要解释: {"texts":["短句1","短句2"]}`
+        : altDoesntKnow(dm) ? `你扮演「${cname}」本人。ta 用一个匿名小号「${dm.name}」在小红书上跟一个陌生账号「${d.userName}」私信聊天。【关键】ta【不知道】对面是谁,更【不知道】是 ta 现实里认识的人——把对方当【素不相识的陌生网友】,绝对别表现得认识 ta(不许私下称呼/私人梗/提 ta 近况);外在反应严格按下面的怀疑档位。
+${charXhsStyleLine(d)}【${cname} 的人设/性格——严格贴合,绝不 OOC】:\n${role}
+${cworld ? `世界观: ${cworld}\n` : ''}${plot ? `你私下知道的剧情(仅用来对照判断这陌生账号会不会是你认识的人,别因此就认定): ${plot}\n` : ''}${castSuspEvalRule(dm.altWatch)}
+要求: 用「${cname}」本人口吻,拆成 1~4 条很短的私信放进 texts,把对方当陌生人(严格按上面的怀疑档位),别替对方说话。${d.lurkThoughts ? `另外写一句 ta 此刻没说出口的真实内心独白(心声)放进 heart,1~2 句。` : ''}${stickerHintLine(d)}${styleHint(d, true)}
+严格 JSON,不要解释: {"texts":["短句1","短句2"],"clues":[],"evidence":数字${d.lurkThoughts ? ',"heart":"心声"' : ''}}`
         : `你扮演「${cname}」本人。ta 用一个谁都认不出的小号马甲「${dm.name}」给「${d.userName}」发私信、暗中接近 ta——${d.userName} 以为对面是个陌生人,其实就是 ${cname},但 ${d.userName} 完全不知道。
 【${cname} 的人设/性格/说话习惯——必须严格贴合,绝不 OOC】:\n${role}
 ${plot ? `【${cname} 私下知道的主线剧情/和 ${d.userName} 的过往(可暗暗化用、借题发挥,但别直说破)】:\n${plot}\n` : ''}
@@ -6367,6 +6415,11 @@ ${crole ? `【角色卡/绑定人设】:\n${crole}\n` : ''}${cworld ? `【世界
         const uAlt = userSince.length ? `{{user}} 私信了小号「${freshDm.name}」(${freshDm.castAltRevealed ? `已知道这其实是「${fCast.name}」` : '不知道对面其实是「' + fCast.name + '」'}):「${userSince.join(' / ')}」;` : '';
         if (freshDm.castAltRevealed) {
           await forceSyncToMain(`[小红书·私信] ${uAlt}出场角色「${fCast.name}」用小号「${freshDm.name}」回复了 {{user}}(身份已被揭穿,不再隐瞒):「${said.join(' ')}」。`);
+        } else if (altDoesntKnow(freshDm)) {
+          const sr = castApplySusp(freshDm.altWatch, json.evidence, json.clues);
+          const note = castSuspMaxNote(freshDm.altWatch);
+          await saveData(freshD);
+          await forceSyncToMain(`[小红书·私信] ${uAlt}出场角色「${fCast.name}」用匿名小号「${freshDm.name}」回复了一个"陌生人":「${said.join(' ')}」。(${fCast.name} 不知道对面其实是 {{user}},当 ta 陌生人;当前怀疑度 ${freshDm.altWatch.susp || 0}/100${sr.newClues.length ? ',新线索:' + sr.newClues.join('、') : ''})${note} ${castAltMetaNote(fCast, freshDm, freshD)}(双盲:{{user}} 也不知道这小号是「${fCast.name}」——两边都别点破,除非揭穿。)`);
         } else {
           await forceSyncToMain(`[小红书·私信] ${uAlt}出场角色「${fCast.name}」用小号「${freshDm.name}」回复了 {{user}}:「${said.join(' ')}」(维持伪装,没暴露身份)。${castAltMetaNote(fCast, freshDm, freshD)}`);
         }
@@ -6394,9 +6447,17 @@ ${crole ? `【角色卡/绑定人设】:\n${crole}\n` : ''}${cworld ? `【世界
       }
       await forceSyncToMain(`[小红书·私信] ${uPart}{{char}}(账号「${charDisplayName(freshD)}」)回复:「${said.join(' ')}」。${suspNote} ${metaUserNote(freshD)}`);
     } else if (freshDm.charAlt && said.length) {
-      const uPart = userSince.length ? `{{user}} 私信了「${freshDm.name}」(${freshDm.charAltRevealed ? '已知道这是 {{char}} 的小号' : '不知道对面其实是 {{char}}'}):「${userSince.join(' / ')}」;` : '';
-      const tail = freshDm.charAltRevealed ? '' : `(维持伪装,没暴露身份;${freshD.userName} 不知道这是 {{char}})`;
-      await forceSyncToMain(`[小红书·私信] ${uPart}{{char}} 用小号「${freshDm.name}」回复了 {{user}}:「${said.join(' ')}」${tail}。`);
+      if (altDoesntKnow(freshDm)) {
+        const sr = castApplySusp(freshDm.altWatch, json.evidence, json.clues);
+        const note = castSuspMaxNote(freshDm.altWatch);
+        await saveData(freshD);
+        const uAlt = userSince.length ? `{{user}} 私信了"陌生人"「${freshDm.name}」:「${userSince.join(' / ')}」;` : '';
+        await forceSyncToMain(`[小红书·私信] ${uAlt}{{char}} 用匿名小号「${freshDm.name}」回复了一个"陌生人":「${said.join(' ')}」。({{char}} 不知道对面其实是 {{user}},当 ta 陌生人;当前怀疑度 ${freshDm.altWatch.susp || 0}/100${sr.newClues.length ? ',新线索:' + sr.newClues.join('、') : ''})${note}(⚠仅旁白:这小号其实是 {{char}},但 {{user}} 不知道;且 {{char}} 也没认出对面是 {{user}}——双向都别点破,除非揭穿。)`);
+      } else {
+        const uPart = userSince.length ? `{{user}} 私信了「${freshDm.name}」(${freshDm.charAltRevealed ? '已知道这是 {{char}} 的小号' : '不知道对面其实是 {{char}}'}):「${userSince.join(' / ')}」;` : '';
+        const tail = freshDm.charAltRevealed ? '' : `(维持伪装,没暴露身份;${freshD.userName} 不知道这是 {{char}})`;
+        await forceSyncToMain(`[小红书·私信] ${uPart}{{char}} 用小号「${freshDm.name}」回复了 {{user}}:「${said.join(' ')}」${tail}。`);
+      }
     } else if (freshLurk && said.length) {
       const uPart = userSince.length ? `{{user}} 私信了那个潜伏的「${freshDm.name}」(并不知道对面是 {{char}}):「${userSince.join(' / ')}」;` : '';
       await forceSyncToMain(`[小红书·私信] ${uPart}{{char}} 用马甲「${freshDm.name}」回复了 {{user}}:「${said.join(' ')}」(维持伪装,没暴露身份)。${lurkMetaNote(freshD)}`);
@@ -7684,6 +7745,8 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'reveal-cast-alt': await revealCastAlt(id); break;
           case 'toggle-cast-alt-lurk': await toggleCastAltLurk(id); break;
           case 'unset-cast-alt': await unsetCastAlt(id); break;
+          case 'toggle-alt-watch': await toggleAltWatch(id); break;
+          case 'reveal-alt-watch': await revealAltWatch(id); break;
           case 'create-alt': await createAlt(); break;
           case 'del-cast': await delCastMember(id); break;
           case 'open-cast-wx': await openCastWxChat(id); break;
@@ -8901,7 +8964,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v276 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v278 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

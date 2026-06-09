@@ -128,10 +128,15 @@
     APPEARANCE_KEYS.forEach(k => {
       if (ga && ga[k] !== undefined) {
         d[k] = (k === 'appIcons') ? Object.assign({}, ga[k] || {}) : ga[k];
-      } else if (THEME_DEFAULTS[k] !== undefined) {
-        d[k] = (k === 'appIcons') ? Object.assign({}, THEME_DEFAULTS.appIcons) : THEME_DEFAULTS[k];
+      } else {
+        // 全局没存(或全局变量在本环境不可用)→ 优先保留本对话已存的外观,实在没有才用默认
+        const hasLocal = (k === 'appIcons')
+          ? (d.appIcons && Object.values(d.appIcons).some(v => v))
+          : (d[k] !== undefined && d[k] !== '');
+        if (!hasLocal && THEME_DEFAULTS[k] !== undefined) {
+          d[k] = (k === 'appIcons') ? Object.assign({}, THEME_DEFAULTS.appIcons) : THEME_DEFAULTS[k];
+        }
       }
-      // 既无全局、THEME_DEFAULTS 也没有(如 charmOff)→ 保留 d 里的默认值
     });
     // 偏好全局共享:热梗/表情/禁词/全局提示词/活人感(跨对话跨卡);全局没设过则保留当前对话已有值(下次 save 自动迁移到全局)
     let gp = null;
@@ -581,11 +586,13 @@
       const d = loadData();
       const summaryPart = d.storySummary ? `[剧情摘要]\n${d.storySummary}\n\n` : '';
       const N = d.contextMessages || 30;
-      const recent = ctx.chat.slice(-N).map(m => {
-        if (m.extra?.xhs_event || m.data?.xhs_event) return null;
-        const who = m.is_user ? (m.name || '用户') : (m.name || '角色');
-        return `${who}: ${(m.mes || '')}`;
-      }).filter(Boolean).join('\n\n');
+      const recent = ctx.chat
+        .filter(m => !(m.extra?.xhs_event || m.data?.xhs_event))
+        .slice(-N)
+        .map(m => {
+          const who = m.is_user ? (m.name || '用户') : (m.name || '角色');
+          return `${who}: ${(m.mes || '')}`;
+        }).filter(Boolean).join('\n\n');
       const body = summaryPart + (recent ? `[最近剧情]\n${recent}` : '');
       const guard = body ? '\n\n【以上以最新剧情为准:① 剧情里【已经解决/已完成/已说明不用再做】的事(某个任务、某张卷子、某件麻烦),别反复提、别再催、别揪着不放,聊当下的事。② 【只能基于剧情里真实发生/明说过的内容来写,绝对不要捏造剧情里没发生过的细节】(谁做了什么、谁说了什么、点了什么、去了哪、谁坚持要怎样等都不能编);可以表达心情和感受,但别把没发生的事当成发生过的写出来。】' : '';
       return body + guard;
@@ -1498,6 +1505,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
       ['xhs', 'wx', 'set'].forEach(k => { if (typeof obj.appIcons[k] === 'string') d.appIcons[k] = obj.appIcons[k]; });
     }
     clearInputCache('set-theme-import');
+    ['set-home-bgurl', 'set-icon-xhs', 'set-icon-wx', 'set-icon-set'].forEach(clearInputCache);
     await saveData(d);
     updateCharm();
     refreshXhs();
@@ -4461,8 +4469,9 @@ ${role ? `角色人设: ${role}\n` : ''}${cworld ? `世界观/背景: ${cworld}\
     toastr.info(`正在从主线提取 ${cname} 的小红书私信…`);
     const timeAsk = useST ? '\n- 另外给每条加一个 "time" 字段 = 这条消息【在剧情里发生的时间】(如 "5月20日 19:30"、"第二天早上";读不出就给 "")。' : '';
     const sys = `下面是一段角色扮演主线剧情。请把其中「${cname}」(也就是 {{char}})和「{{user}}」之间【通过小红书私信打字发的消息】抽出来,还原成一段聊天记录(按先后顺序)。
-- 只要【在小红书私信里打字发的消息】,不要把当面说的话、动作、旁白、心理算进来;也不要把微信/短信里的消息算进来;剧情里没有"小红书私信"这回事就返回空数组。
-- 每条标明是谁发的:role 用 "char"(${cname} 发的) 或 "user"({{user}} 发的)。
+- 【尽量抓全】:凡是 ta 俩【在小红书私信里打字发的/收到的】内容都要抓——不光直接打引号的,【被旁白转述的也要抓】(如"他私信回了句…""她发来一条说…"),把转述【还原成实际发出的那句话】;短句、语气词、单个表情也别漏。
+- 但只算【小红书私信里打字发的】:当面说的话、动作、旁白、心理不算;也不要把微信/短信里的消息算进来;剧情里没有"小红书私信"这回事就返回空数组。
+- 【仔细分辨发送者,别丢】:逐条判断是 ${cname} 发的还是 {{user}} 发的;role 用 "char"(${cname} 发的)或 "user"({{user}} 发的);拿不准就按上下文最合理的归属,别因为拿不准就把这条丢掉。
 - 长的一段可拆成几条短消息。${timeAsk}
 只输出严格 JSON,不要解释、不要 markdown: {"chatlog":[{"role":"char或user","text":"消息内容"${useST ? ',"time":"剧情时间(读不出就空)"' : ''}}]}
 主线剧情:
@@ -4475,21 +4484,34 @@ ${ctx}`;
     if (!log.length) { toastr.warning(`主线里没读到 ${cname} 发的小红书私信,确认剧情里 ta 真的在小红书私信里发了消息再试`); return; }
     const d = loadData();
     const dm = getCharDm(d);
+    const dmlog = dedupImportLog(dm, log);
+    if (!dmlog.length) { toastr.info('这些消息之前都导入过了,没有新内容'); return; }
     const tk0 = Date.now();
-    log.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
+    dmlog.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
     const reordered = useST ? sortChatByStoryTime(dm.messages) : false;
     dm.lastTime = Date.now();
-    dm.unread = log.some(m => m.role === 'npc');
+    dm.unread = dmlog.some(m => m.role === 'npc');
     d.currentApp = 'xhs';
     d.currentRoute = 'dm-chat';
     d.routeContext = { dmId: dm.id };
     await saveData(d);
     refreshXhs();
-    const charN = log.filter(m => m.role === 'npc').length;
-    toastr.success(`✓ 已导入 ${log.length} 条(${cname} ${charN} 条)${reordered ? ',已按剧情时间排好' : ''},已同步进小红书私信`);
+    const charN = dmlog.filter(m => m.role === 'npc').length;
+    const skipped = log.length - dmlog.length;
+    toastr.success(`✓ 已导入 ${dmlog.length} 条(${cname} ${charN} 条)${skipped > 0 ? `,跳过 ${skipped} 条重复` : ''}${reordered ? ',已按剧情时间排好' : ''},已同步进小红书私信`);
   }
 
   // 从主线导入 char 通过手机/微信发给 user 的消息,同步进微信里和 ta 的对话
+  // 导入去重:同一条(role+正文)已经在这条对话里就跳过,避免重复导入
+  function dedupImportLog(dm, log) {
+    const seen = new Set((dm.messages || []).map(m => (m.role || '') + '\u0001' + (m.text || '').trim()));
+    const out = [];
+    (log || []).forEach(m => {
+      const key = (m.role || '') + '\u0001' + (m.text || '').trim();
+      if (m.text && !seen.has(key)) { seen.add(key); out.push(m); }
+    });
+    return out;
+  }
   async function importWxCharMsgs() {
     const useST = !!loadData().useStoryTime;
     const cname = getCharName();
@@ -4498,8 +4520,9 @@ ${ctx}`;
     toastr.info(`正在从主线提取 ${cname} 的微信消息…`);
     const timeAsk = useST ? '\n- 另外给每条加一个 "time" 字段 = 这条消息【在剧情里发生的时间】(如 "5月20日 19:30"、"第二天早上";读不出就给 "")。' : '';
     const sys = `下面是一段角色扮演主线剧情。请把其中「${cname}」(也就是 {{char}})和「{{user}}」之间【通过手机/微信/短信打字发的消息】抽出来,还原成一段微信聊天记录(按先后顺序)。
-- 只要【打字发出去的消息】,不要把当面说的话、动作、旁白、心理描写算进来;剧情里没有"发消息"这回事就返回空数组。
-- 每条标明是谁发的:role 用 "char"(${cname} 发的) 或 "user"({{user}} 发的)。
+- 【尽量抓全】:凡是 ta 俩【隔着手机打字发的/收到的】内容都要抓——不光直接打引号的消息,【被旁白转述的也要抓】(如"他回了句改天约""她秒回了个'好'""微信上说在加班"),把转述【还原成 ta 当时实际发出的那句话】。短句、语气词、单个表情也别漏。
+- 但只算【打字发的】:当面说的话、打电话/语音通话、动作、心理、纯旁白叙述本身不算;【也不要把小红书私信里的消息算进来】(那是另一个 app)。剧情里没有"发微信消息"这回事就返回空数组。
+- 【仔细分辨发送者,别丢】:逐条判断是 ${cname} 发的还是 {{user}} 发的(看"他/她/${cname} 说·发·回"和"{{user}} 说·发·回""我回道"等线索);role 用 "char"(${cname} 发的)或 "user"({{user}} 发的);拿不准发送者就按上下文最合理的归属,【别因为拿不准就把这条丢掉】。
 - 长的一段可拆成几条短消息,像真人发微信。${timeAsk}
 只输出严格 JSON,不要解释、不要 markdown: {"chatlog":[{"role":"char或user","text":"消息内容"${useST ? ',"time":"剧情时间(读不出就空)"' : ''}}]}
 主线剧情:
@@ -4512,18 +4535,21 @@ ${ctx}`;
     if (!log.length) { toastr.warning(`主线里没读到 ${cname} 发的微信消息,确认剧情里 ta 真的发了消息再试`); return; }
     const d = loadData();
     const dm = getWxCharDm(d);
+    const dmlog = dedupImportLog(dm, log);
+    if (!dmlog.length) { toastr.info('这些消息之前都导入过了,没有新内容'); return; }
     const tk0 = Date.now();
-    log.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
+    dmlog.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
     const reordered = useST ? sortChatByStoryTime(dm.messages) : false;
     dm.lastTime = Date.now();
-    dm.unread = log.some(m => m.role === 'npc');
+    dm.unread = dmlog.some(m => m.role === 'npc');
     d.currentApp = 'wx';
     d.currentRoute = 'dm-chat';
     d.routeContext = { dmId: dm.id };
     await saveData(d);
     refreshXhs();
-    const charN = log.filter(m => m.role === 'npc').length;
-    toastr.success(`✓ 已导入 ${log.length} 条(${cname} ${charN} 条)${reordered ? ',已按剧情时间排好' : ''},已同步进微信`);
+    const charN = dmlog.filter(m => m.role === 'npc').length;
+    const skipped = log.length - dmlog.length;
+    toastr.success(`✓ 已导入 ${dmlog.length} 条(${cname} ${charN} 条)${skipped > 0 ? `,跳过 ${skipped} 条重复` : ''}${reordered ? ',已按剧情时间排好' : ''},已同步进微信`);
   }
 
   // 多人卡:从主线提取【某个出场角色】和 user 之间的微信/小红书私信(按对话所属角色 + 渠道自动判定)
@@ -4543,8 +4569,10 @@ ${ctx}`;
     toastr.info(`正在从主线提取 ${cname} 的${surfName}消息…`);
     const timeAsk = useST ? '\n- 另外给每条加一个 "time" 字段 = 这条消息【在剧情里发生的时间】(如 "5月20日 19:30"、"第二天早上";读不出就给 "")。' : '';
     const sys = `下面是一段角色扮演主线剧情。请把其中【出场角色「${cname}」】和「{{user}}」之间【通过${surfLabel}】抽出来,还原成一段聊天记录(按先后顺序)。
-- 【只挑「${cname}」和 {{user}} 之间的】:别把卡里【其他角色】的消息算进来;也别把当面说的话、动作、旁白、心理描写算进来;${isWx ? '也别把小红书私信里的算进来' : '也别把微信/短信里的算进来'};剧情里没有这种消息就返回空数组。
-- 每条标明是谁发的:role 用 "char"(${cname} 发的) 或 "user"({{user}} 发的)。
+- 【只挑「${cname}」和 {{user}} 之间的】:别把卡里【其他角色】的消息算进来。
+- 【尽量抓全】:凡是 ta 俩【通过${surfLabel}发的/收到的】内容都要抓——不光直接打引号的,【被旁白转述的也要抓】(如"ta 回了句…""ta 发来…"),把转述【还原成实际发出的那句话】;短句、语气词、单个表情也别漏。
+- 但只算【这个渠道打字发的】:当面说的话、动作、旁白、心理不算;${isWx ? '也别把小红书私信里的算进来' : '也别把微信/短信里的算进来'};剧情里没有这种消息就返回空数组。
+- 【仔细分辨发送者,别丢】:逐条判断是 ${cname} 发的还是 {{user}} 发的;role 用 "char"(${cname} 发的)或 "user"({{user}} 发的);拿不准就按上下文最合理的归属,别因为拿不准就把这条丢掉。
 - 长的一段可拆成几条短消息。${timeAsk}
 只输出严格 JSON,不要解释、不要 markdown: {"chatlog":[{"role":"char或user","text":"消息内容"${useST ? ',"time":"剧情时间(读不出就空)"' : ''}}]}
 主线剧情:
@@ -4558,18 +4586,21 @@ ${ctx}`;
     const d = loadData();
     const dm = (d.dms || []).find(x => x.id === dmId);
     if (!dm) return;
+    const dmlog = dedupImportLog(dm, log);
+    if (!dmlog.length) { toastr.info('这些消息之前都导入过了,没有新内容'); return; }
     const tk0 = Date.now();
-    log.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
+    dmlog.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
     const reordered = useST ? sortChatByStoryTime(dm.messages) : false;
     dm.lastTime = Date.now();
-    dm.unread = log.some(m => m.role === 'npc');
+    dm.unread = dmlog.some(m => m.role === 'npc');
     d.currentApp = isWx ? 'wx' : 'xhs';
     d.currentRoute = 'dm-chat';
     d.routeContext = { dmId: dm.id };
     await saveData(d);
     refreshXhs();
-    const charN = log.filter(m => m.role === 'npc').length;
-    toastr.success(`✓ 已导入 ${log.length} 条(${cname} ${charN} 条)${reordered ? ',已按剧情时间排好' : ''},已同步进${surfName}`);
+    const charN = dmlog.filter(m => m.role === 'npc').length;
+    const skipped = log.length - dmlog.length;
+    toastr.success(`✓ 已导入 ${dmlog.length} 条(${cname} ${charN} 条)${skipped > 0 ? `,跳过 ${skipped} 条重复` : ''}${reordered ? ',已按剧情时间排好' : ''},已同步进${surfName}`);
   }
 
   // 从主线导入 char 偷偷建的小号 + ta 用这个号发的私信
@@ -6359,6 +6390,8 @@ ${crole ? `【角色卡/绑定人设】:\n${crole}\n` : ''}${cworld ? `【世界
     }
     let tk = Date.now();
     const said = [];
+    // 回复的剧情时间戳:跟随【这条对话最近一条消息的 st】(也就是你刚发/刚手动改过时间的那条),而不是全局主线时间
+    const replySt = (() => { const ms = freshDm.messages || []; for (let i = ms.length - 1; i >= 0; i--) { if (ms[i].st) return ms[i].st; } return stStamp(freshD); })();
     const qRef = (json.quote && arr.length) ? npcQuoteRef(freshDm.messages.slice(0), json.quote, freshD.wxName || freshD.userName) : null;
     let _qd = false;
     arr.forEach(t => {
@@ -6369,20 +6402,20 @@ ${crole ? `【角色卡/绑定人设】:\n${crole}\n` : ''}${cworld ? `【世界
       if (stkM) {
         const sdesc = (stkM[1] || '').trim();
         const hit = (freshD.stickers || []).find(s => s.name && (s.name === sdesc || sdesc.includes(s.name) || s.name.includes(sdesc)));
-        if (hit) { freshDm.messages.push({ role: 'npc', kind: 'sticker', url: hit.url, name: hit.name, time: tk++, st: stStamp(freshD) }); said.push('[表情]'); }
+        if (hit) { freshDm.messages.push({ role: 'npc', kind: 'sticker', url: hit.url, name: hit.name, time: tk++, st: replySt }); said.push('[表情]'); }
         return;
       }
       // 发图:整条是 [图片:描述] 或 [图片] → 转成真正的图片消息(把描述显示在图框里)
       const imgM = txt.match(/^\[\s*图片\s*[:：]?\s*([\s\S]*?)\]$/);
       if (imgM) {
         const desc = (imgM[1] || '').trim();
-        const _im = { role: 'npc', kind: 'image', text: desc, time: tk++, st: stStamp(freshD) };
+        const _im = { role: 'npc', kind: 'image', text: desc, time: tk++, st: replySt };
         if (qRef && !_qd) { _im.quote = qRef; _qd = true; }
         freshDm.messages.push(_im);
         said.push(desc ? `[图片:${desc}]` : '[图片]');
         return;
       }
-      const _tm = { role: 'npc', text: txt, time: tk++, st: stStamp(freshD) };
+      const _tm = { role: 'npc', text: txt, time: tk++, st: replySt };
       if (qRef && !_qd) { _tm.quote = qRef; _qd = true; }
       freshDm.messages.push(_tm);
       said.push(txt);
@@ -6390,11 +6423,11 @@ ${crole ? `【角色卡/绑定人设】:\n${crole}\n` : ''}${cworld ? `【世界
     // 对方发来的表情包(从用户导入的表情里选)
     if (json.sticker) {
       const stk = (freshD.stickers || []).find(s => s.name === json.sticker);
-      if (stk) freshDm.messages.push({ role: 'npc', kind: 'sticker', url: stk.url, name: stk.name, time: tk++, st: stStamp(freshD) });
+      if (stk) freshDm.messages.push({ role: 'npc', kind: 'sticker', url: stk.url, name: stk.name, time: tk++, st: replySt });
     }
     // 潜伏马甲私信:开了"偷听心声"就显示一条上帝视角心声
     if ((freshLurk || freshDm.charAlt || freshDm.castAlt) && freshD.lurkThoughts && json.heart) {
-      freshDm.messages.push({ role: 'heart', name: freshDm.name, text: String(json.heart).slice(0, 120), time: tk++, st: stStamp(freshD) });
+      freshDm.messages.push({ role: 'heart', name: freshDm.name, text: String(json.heart).slice(0, 120), time: tk++, st: replySt });
     }
     freshDm.lastTime = tk;
     const lastNpcText = said.length ? said[said.length - 1] : (json.sticker ? '[表情]' : '');
@@ -8964,7 +8997,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v278 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v282 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

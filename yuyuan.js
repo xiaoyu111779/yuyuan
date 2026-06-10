@@ -4502,13 +4502,23 @@ ${ctx}`;
   }
 
   // 从主线导入 char 通过手机/微信发给 user 的消息,同步进微信里和 ta 的对话
-  // 导入去重:同一条(role+正文)已经在这条对话里就跳过,避免重复导入
+  // 导入去重:同一条已经在这条对话里就跳过。比对时先【归一化】(抹掉空格/标点/引号/大小写),
+  // 这样"同一句话的不同写法"(标点/拆句差异)也能判成重复,不再漏判。
+  function normMsgText(t) {
+    return String(t || '')
+      .replace(/\s+/g, '')
+      .replace(/[，,。.！!？?、；;：:""''「」『』《》（）()【】\[\]…—~～\-·、]/g, '')
+      .toLowerCase()
+      .trim();
+  }
   function dedupImportLog(dm, log) {
-    const seen = new Set((dm.messages || []).map(m => (m.role || '') + '\u0001' + (m.text || '').trim()));
+    const seen = new Set((dm.messages || []).map(m => (m.role || '') + '\u0001' + normMsgText(m.text)));
     const out = [];
     (log || []).forEach(m => {
-      const key = (m.role || '') + '\u0001' + (m.text || '').trim();
-      if (m.text && !seen.has(key)) { seen.add(key); out.push(m); }
+      const n = normMsgText(m.text);
+      if (!n) return; // 归一化后空(纯标点)就丢
+      const key = (m.role || '') + '\u0001' + n;
+      if (!seen.has(key)) { seen.add(key); out.push(m); }
     });
     return out;
   }
@@ -7231,13 +7241,19 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     if (has('set-susp-sens')) d.suspSensitivity = doc.getElementById('set-susp-sens').value || 'slow';
     if (has('set-susp-auto')) d.suspAutoReveal = !!chk('set-susp-auto');
     if (has('set-stickers')) {
-      d.stickers = (readInputCache('set-stickers') || '').split(/\n+/).map(line => {
+      const rawStk = (readInputCache('set-stickers') || '');
+      const stkLines = rawStk.split(/\n+/).map(l => l.trim()).filter(Boolean);
+      d.stickers = stkLines.map(line => {
         const i = Math.min(...['：', ':', '|'].map(c => { const x = line.indexOf(c); return x < 0 ? Infinity : x; }));
         if (!isFinite(i)) return null;
         const name = line.slice(0, i).trim();
         const url = line.slice(i + 1).trim();
         return (name && /^https?:\/\//i.test(url)) ? { name, url } : null;
-      }).filter(Boolean).slice(0, 40);
+      }).filter(Boolean).slice(0, 200);
+      if (stkLines.length && d.stickers.length < stkLines.length) {
+        const skipped = stkLines.length - d.stickers.length;
+        setTimeout(() => toastr.warning(`表情包:已存 ${d.stickers.length} 个,有 ${skipped} 行没认出——每行要写成「名字：链接」、链接以 http 开头${stkLines.length > 200 ? ';且上限 200 个' : ''}`, '', { timeOut: 6000 }), 150);
+      }
     }
     if (has('set-sync-main')) { d.syncToMain = !!chk('set-sync-main'); }
     if (has('set-sync-hidden')) d.syncHidden = !!chk('set-sync-hidden');
@@ -8997,7 +9013,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v282 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v284 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

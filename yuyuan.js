@@ -1954,6 +1954,35 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
   const FIC_TONES = ['酸涩克制', '炽热占有', '钝刀子割肉的虐', '温吞治愈', '满是张力的暧昧', '怅然若失的怀旧'];
   const FIC_POV = ['第一人称内心独白', '第三人称冷静旁观', '书信/短信体', '聊天记录体', '第二人称("你")', '碎片化蒙太奇'];
   const FIC_END = ['HE', 'BE', '开放式结局', 'BE美学留白', 'HE但留一根刺'];
+  // 普通帖"口吻种子":每次刷新随机抽几种完全不同的说话口吻,强制 10 条像不同的人写的(治同质化)
+  const NPC_VOICES = [
+    '话痨流水账长文,事无巨细',
+    '高冷三两句就完事、惜字如金',
+    '全小写几乎不打标点的丧系疲惫感',
+    '满屏 emoji 和颜文字的元气音',
+    '爹味说教、爱给人上课',
+    '文艺矫情、爱用比喻和省略号…',
+    '理中客分析帝、一二三四列点',
+    '满嘴网络黑话烂梗的极度网感',
+    '中年养生、朴实长辈口吻',
+    '精致白领凡尔赛、不经意地秀',
+    '暴躁开麦、连用感叹号的愤怒吐槽',
+    '阴阳怪气、反讽拉满',
+    '稚气未脱的学生语气',
+    '社恐小心翼翼、不停自我怀疑',
+    '抽象发疯文学',
+    '冷静克制的专业测评/科普向',
+    '甜妹撒娇黏糊糊',
+    '大大咧咧带点方言味的直球',
+    '丧里带笑的摆烂自嘲',
+    '端着的知识分子腔、引经据典',
+  ];
+  function npcVoiceSeed() {
+    const arr = NPC_VOICES.slice();
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    const pick = arr.slice(0, 5);
+    return `\n【口吻要各不相同·重要】这 10 条要像【10 个不同的人】发的,每条的说话口吻、句式、长短、标点和 emoji 习惯都要明显不一样,别都是同一种"小红书 AI 腔"。这一批里至少覆盖这几种【完全不同的口吻】(对号入座、别糊成一种):${pick.map((x, i) => `(${i + 1})${x}`).join(';')}。其余几条也各换花样:有的就一句话、有的长篇;有的不用 emoji、有的满屏;有的爱用…省略号、有的爱用感叹号。`;
+  }
   function _pick(a) { return a[Math.floor(Math.random() * a.length)]; }
   function ficSeedHint(n, lockCP) {
     const seeds = [];
@@ -2156,6 +2185,10 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
     toastr.info('正在生成 10 条帖子…');
     const d0 = loadData();
     const world = getWorldSetting();
+    // 防重复:把最近已经刷到的帖子标题喂回去,叫它别再出雷同题材/桥段
+    const recentTitles = (d0.feed || []).slice(0, 30).map(p => (p.title || '').trim()).filter(Boolean);
+    const avoidLine = recentTitles.length ? `\n【⚠别和这些重复】下面是最近【已经刷到过】的帖子,这次生成的【题材、情节、桥段都要和它们明显不同】,别换个标题讲同一件事:\n${recentTitles.map(t => `· ${t}`).join('\n')}\n` : '';
+    const antiCliche = `\n【避开这些被写烂的烂俗桥段】(除非用户口味明确要,否则别用,换更新鲜具体的角度):室友带对象回家/秀恩爱、捡到一只猫狗、被绿/查岗抓出轨、相亲遇到奇葩、地铁/便利店偶遇心动、前任发来结婚请柬、楼下情侣吵架、闺蜜抢男友、租房遇到极品房东/室友、奶茶店帅哥店员、外卖小哥小纸条——这些一眼假的套路尽量别碰。\n`;
     const prefsLine = d0.feedPrefs ? `\n【用户口味偏好(首页整体)】ta 爱看这些题材/氛围,请明显多推、贴合: ${d0.feedPrefs}\n` : '';
     const liked = (d0.likedSignals || []).slice(-12);
     const likedLine = liked.length ? `\n【ta 最近点赞过】(反映口味,可多推类似的): ${liked.join(' / ')}\n` : '';
@@ -2233,7 +2266,7 @@ ${prefsLine}${likedLine}${ficLine}要求:
 2. 每条带: type("text"/"image";同人文、纯文字用 text,擦边/穿搭/探店/卖货多用 image)、author(网名)、title(<25字,够吸睛)、coverText、content(普通帖50~120字;同人文${ficWMin}~${ficWMax}字)、tags(同人文必给,其他可空)
    ★coverText 规则:【配图帖(image)】的 coverText 要写成"这张配图的【画面内容描述】",即图里是什么,例如"健身房镜子自拍,腹肌出镜""一桌火锅俯拍""穿搭全身镜自拍";【不要】写成标题口号或心里话。【纯文字帖(text)】的 coverText 才是大字标语句。
 3. 每条预生成 2~4 条评论(comments),风格真实:捧场/玩梗神人/也可阴阳怪气泼冷水。comment 里不要出现"${d0.userName}"
-4. 10 条题材尽量不重复
+4. 10 条题材尽量不重复${npcVoiceSeed()}${antiCliche}${avoidLine}
 ${xhsNameRule()}${memeHint(d0)}${toneHint(d0) + xhsNpcStyleLine(d0)}${styleHint(d0, false)}
 严格 JSON,不要解释:
 {"posts":[{"type":"text或image或chat","author":"网名","title":"...","coverText":"...","content":"...","tags":["tag"],"chatlog":[{"side":"l或r","name":"昵称","text":"..."}],"comments":[{"author":"网名","text":"评论"}]}]}\n(chatlog 只在 type=chat 的恋爱日记帖给,其它帖不要这个字段)`;
@@ -9013,7 +9046,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v284 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v286 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

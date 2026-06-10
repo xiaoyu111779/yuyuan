@@ -2186,7 +2186,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
     const d0 = loadData();
     const world = getWorldSetting();
     // 防重复:把最近已经刷到的帖子标题喂回去,叫它别再出雷同题材/桥段
-    const recentTitles = (d0.feed || []).slice(0, 30).map(p => (p.title || '').trim()).filter(Boolean);
+    const recentTitles = (d0.feed || []).slice(0, 18).map(p => (p.title || '').trim()).filter(Boolean);
     const avoidLine = recentTitles.length ? `\n【⚠别和这些重复】下面是最近【已经刷到过】的帖子,这次生成的【题材、情节、桥段都要和它们明显不同】,别换个标题讲同一件事:\n${recentTitles.map(t => `· ${t}`).join('\n')}\n` : '';
     const antiCliche = `\n【避开这些被写烂的烂俗桥段】(除非用户口味明确要,否则别用,换更新鲜具体的角度):室友带对象回家/秀恩爱、捡到一只猫狗、被绿/查岗抓出轨、相亲遇到奇葩、地铁/便利店偶遇心动、前任发来结婚请柬、楼下情侣吵架、闺蜜抢男友、租房遇到极品房东/室友、奶茶店帅哥店员、外卖小哥小纸条——这些一眼假的套路尽量别碰。\n`;
     const prefsLine = d0.feedPrefs ? `\n【用户口味偏好(首页整体)】ta 爱看这些题材/氛围,请明显多推、贴合: ${d0.feedPrefs}\n` : '';
@@ -2271,7 +2271,7 @@ ${xhsNameRule()}${memeHint(d0)}${toneHint(d0) + xhsNpcStyleLine(d0)}${styleHint(
 严格 JSON,不要解释:
 {"posts":[{"type":"text或image或chat","author":"网名","title":"...","coverText":"...","content":"...","tags":["tag"],"chatlog":[{"side":"l或r","name":"昵称","text":"..."}],"comments":[{"author":"网名","text":"评论"}]}]}\n(chatlog 只在 type=chat 的恋爱日记帖给,其它帖不要这个字段)`;
     const raw = await callXhsAPI(sys + storyTimeAsk(d0), '生成 10 条多元化的小红书帖子,含指定数量的同人文短文,各自带评论');
-    if (!raw) return;
+    if (!raw) { toastr.error('生成失败:模型这次没返回内容,稍等再点一次🔄'); return; }
     const json = tryParseJSON(raw, { posts: [] });
     const d = loadData();
     applyAutoStoryTime(d, json);
@@ -2312,6 +2312,7 @@ ${xhsNameRule()}${memeHint(d0)}${toneHint(d0) + xhsNpcStyleLine(d0)}${styleHint(
       };
     });
     // 保留旧帖子,新帖子放前面,去重,封顶 40 条
+    if (!newPosts.length) { toastr.warning('这次没解析出帖子(模型可能没按格式回),再点一次🔄试试'); return; }
     const prev = (d.feed || []);
     const seen = new Set(newPosts.map(p => p.title + '|' + p.author));
     const kept = prev.filter(p => !seen.has((p.title || '') + '|' + (p.author || '')));
@@ -2375,8 +2376,8 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
 每篇给:type("text"或"chat")、author(写手网名)、title(<25字,够吸引人)、coverText(一句话简介/钩子)、content(正文,按体裁写;聊天体则是开头那段恋爱日记)、tags(["骨科","酸涩","HE"] 这种)、chatlog(仅 chat 体给)。
 严格 JSON,不要解释:
 {"fics":[{"type":"text或chat","author":"网名","title":"...","coverText":"...","content":"...","tags":["tag"],"chatlog":[{"side":"l或r","name":"昵称","text":"..."}]}]}\n(chatlog 只在 type=chat 时给)`;
-    const raw = await callXhsAPI(sys + storyTimeAsk(d0), `写 ${n} 篇真正展开的同人文短篇`);
-    if (!raw) return;
+    const raw = await callXhsAPI(sys + storyTimeAsk(d0), `写 ${n} 篇真正展开的同人文短篇`, { noContext: true });
+    if (!raw) { toastr.warning('同人文没生成出来。若提示 bad request,多半是①API 把同人文内容(骨科/禁忌/擦边等)风控拦了,或②上下文太长——可换个模型/中转、调低篇数和字数、或精简梗池/世界书后再试', '', { timeOut: 9000 }); return; }
     const json = tryParseJSON(raw, { fics: [] });
     const d = loadData();
     applyAutoStoryTime(d, json);
@@ -9046,7 +9047,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v286 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v288 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

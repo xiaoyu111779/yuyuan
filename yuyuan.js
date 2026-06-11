@@ -806,6 +806,22 @@
       (typeof f === 'string') ? (f === oldCN ? newCN : f)
         : (f && f.name === oldCN ? Object.assign(f, { name: newCN }) : f));
   }
+  // user 改小红书名时,把旧名下的帖子/评论/被回复名迁到新名(对应 char 的 migrateCharName)
+  function migrateUserName(d, oldUN, newUN) {
+    const fixArr = (arr) => (arr || []).forEach(p => {
+      if (p.author === oldUN) p.author = newUN;
+      (p.comments || []).forEach(c => {
+        if (c.author === oldUN) c.author = newUN;
+        if (c.reply_to === oldUN) c.reply_to = newUN;
+        (c.replies || []).forEach(r => {
+          if (r.author === oldUN) r.author = newUN;
+          if (r.reply_to === oldUN) r.reply_to = newUN;
+        });
+      });
+    });
+    fixArr(d.feed); fixArr(d.myPosts); fixArr(d.ficFeed);
+    Object.values(d.npcProfiles || {}).forEach(prof => prof && fixArr(prof.posts));
+  }
   function charBadge() {
     return '<span class="xhs-char-badge">💑</span>';
   }
@@ -3245,7 +3261,7 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
               ${c.first ? '<span class="xhs-c-first">首评</span>' : ''}
               <button class="xhs-c-reply-btn" data-action="reply-comment" data-id="${post.id}" data-cid="${c.id}" data-name="${esc(c.author)}">回复</button>
               ${(() => {
-                const isUserC = c.author === d.userName;
+                const isUserC = c._mine || c.author === d.userName;
                 const isCharC = isCharAcct(c.author, d);
                 const isCharPostV = post.author === charDisplayName(d);
                 const isUserPostV = isMine || post.author === d.userName;
@@ -3763,7 +3779,7 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
 
     let sys, raw;
     const knows = d.charKnowsAlt === 'knows';
-    const isUserPost = post.author === userName;
+    const isUserPost = post.author === userName || (d.myPosts || []).some(p => p.id === postId);
     const owner = post.author;
     const ownerReply = !charReply && !isCharPost && !isUserPost; // 路人帖 → 让帖主回复这条评论
     if (charReply) {
@@ -3972,8 +3988,8 @@ ${xhsNameRule()}${memeHint(d)}${stickerRule}${toneHint(d) + xhsNpcStyleLine(d)}$
       const flat = flattenComments(tops);
       const meLabel = isMyPost ? '【楼主(发帖人)】' : '【我·一条普通路人评论】';
       const numbered = flat.map((f, i) =>
-        `[${i + 1}] ${f.c.author === d.userName ? meLabel : ''}${f.c.author}${f.c.reply_to ? ` 回复${f.c.reply_to}` : ''}: ${f.c.text} (当前${f.c.likes || 0}赞)`).join('\n');
-      const userCmtIdx = flat.map((f, i) => f.c.author === d.userName ? (i + 1) : null).filter(x => x);
+        `[${i + 1}] ${(f.c._mine || f.c.author === d.userName) ? meLabel : ''}${f.c.author}${f.c.reply_to ? ` 回复${f.c.reply_to}` : ''}: ${f.c.text} (当前${f.c.likes || 0}赞)`).join('\n');
+      const userCmtIdx = flat.map((f, i) => (f.c._mine || f.c.author === d.userName) ? (i + 1) : null).filter(x => x);
       const interactRule = userCmtIdx.length
         ? (isMyPost
           ? `\n★【增强互动】发帖人本人(${d.userName})在自己帖子下发了评论,序号 ${userCmtIdx.join('、')}。请针对这些生成 2~4 条网友回复(to_idx 指向这些序号),接梗/回应/调侃/共情。回复者都是不认识 ta 的网友,别编造 ta 的身份或私生活。`
@@ -4006,7 +4022,7 @@ ${numbered}
       });
       // 楼主自己的评论也会被网友点赞,每次重新生成都涨一点
       flat.forEach(f => {
-        if (f.c.author === d.userName) f.c.likes = (f.c.likes || 0) + Math.floor(Math.random() * 25) + 3;
+        if (f.c._mine || f.c.author === d.userName) f.c.likes = (f.c.likes || 0) + Math.floor(Math.random() * 25) + 3;
       });
       // 跟随回复(挂到目标所在楼层)
       const repliesToUser = [];
@@ -4017,7 +4033,7 @@ ${numbered}
         if (top) {
           top.replies = top.replies || [];
           top.replies.push({ id: uid(), author: r.author, reply_to: f.c.author, text: r.text || '', likes: Math.floor(Math.random() * 30), liked: false, time: Date.now(), location: pickLoc() });
-          if (f.c.author === d.userName) {
+          if (f.c._mine || f.c.author === d.userName) {
             // 回复了 user → 任何帖子都通知;并记下来用于打包同步
             addNotif(d, { kind: 'reply', author: r.author, text: r.text || '', replyTo: f.c.text, postId: post.id });
             repliesToUser.push({ cid: top.id, line: `${r.author}回道「${r.text || ''}」` });
@@ -4939,12 +4955,12 @@ ${knows ? '' : suspEvalRule(d)}${stickerHintLine(d)}想配图(比如你拍的照
     const items = [];
     tops.forEach(top => {
       if (top.author && top.author !== cname && !isCharAcct(top.author, d) && !charRepliedTo(top, top.author)) {
-        items.push({ c: top, topId: top.id, isUser: top.author === userName });
+        items.push({ c: top, topId: top.id, isUser: top._mine || top.author === userName });
       }
       (top.replies || []).forEach(r => {
         if (!r.author || r.author === cname || isCharAcct(r.author, d) || r.isChar) return;
         if (charRepliedTo(top, r.author)) return;
-        items.push({ c: r, topId: top.id, isUser: r.author === userName });
+        items.push({ c: r, topId: top.id, isUser: r._mine || r.author === userName });
       });
     });
     const userCmts = items.filter(x => x.isUser).slice(0, 4);
@@ -5105,12 +5121,12 @@ ${stickerHintLine(d)}想配图就加 "comment_img"(图片文字描述,别露骨)
     const items = [];
     tops.forEach(top => {
       if (top.author && top.author !== cname && top.castId !== castId && !castRepliedTo(top, top.author)) {
-        items.push({ c: top, topId: top.id, isUser: top.author === userName });
+        items.push({ c: top, topId: top.id, isUser: top._mine || top.author === userName });
       }
       (top.replies || []).forEach(r => {
         if (!r.author || r.author === cname || r.castId === castId) return;
         if (castRepliedTo(top, r.author)) return;
-        items.push({ c: r, topId: top.id, isUser: r.author === userName });
+        items.push({ c: r, topId: top.id, isUser: r._mine || r.author === userName });
       });
     });
     const userCmts = items.filter(x => x.isUser).slice(0, 4);
@@ -7416,7 +7432,9 @@ ${crole ? `【角色卡/绑定人设】:\n${crole}\n` : ''}${cworld ? `【世界
     const avatar = TOP.prompt('头像(填图片URL,留空用默认🐷):', d.userAvatar || '');
     if (avatar === null) return;
     const fans = TOP.prompt('粉丝数(数字):', String(d.fansCount || 0));
-    d.userName = (name || '我').trim() || '我';
+    const _newUN = (name || '我').trim() || '我';
+    if (d.userName && _newUN && d.userName !== _newUN) migrateUserName(d, d.userName, _newUN);
+    d.userName = _newUN;
     d.userBio = bio.trim();
     d.userRedId = redId.trim();
     d.userGender = (gender || '').trim();
@@ -8012,7 +8030,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     if (has('set-url')) d.api.apiurl = (readInputCache('set-url') || '').trim();
     if (has('set-key')) d.api.key = (readInputCache('set-key') || '').trim();
     if (has('set-model')) d.api.model = (readInputCache('set-model') || '').trim();
-    if (has('set-user-name')) d.userName = (readInputCache('set-user-name') || '我').trim() || '我';
+    if (has('set-user-name')) { const _nun = (readInputCache('set-user-name') || '我').trim() || '我'; if (d.userName && _nun && d.userName !== _nun) migrateUserName(d, d.userName, _nun); d.userName = _nun; }
     if (has('set-ctx-msgs')) d.contextMessages = Math.max(5, Math.min(100, parseInt(readInputCache('set-ctx-msgs')) || 30));
     if (has('set-memes')) d.memes = (readInputCache('set-memes') || '').trim().slice(0, 12000);
     if (has('set-tone')) d.platformTone = (readInputCache('set-tone') || '').trim().slice(0, 2000);
@@ -9877,7 +9895,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v316 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v318 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

@@ -1347,7 +1347,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
         date: clip(x && x.date, 12), time: clip(x && x.time, 10), duration: clip(x && x.duration, 12),
         shape: clip(x && x.shape, 50), color: clip(x && x.color, 16),
         smooth: OK.indexOf(x && x.smooth) >= 0 ? x.smooth : '一般',
-        didWhat: clip(x && x.didWhat, 60), comment: clip(x && x.comment, 120),
+        didWhat: clip(x && x.didWhat, 80), comment: clip(x && x.comment, 120),
         rating: Math.min(5, Math.max(1, parseInt(x && x.rating) || 3)),
       })).filter(x => x.shape || x.time),
     };
@@ -1805,7 +1805,8 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
       return `
       <div style="margin:10px 12px 0;background:#fff;border-radius:12px;padding:13px 14px">
         <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:14.5px;font-weight:700;color:#333">${esc(r.date)} <span style="font-weight:400;color:#b3b3b3;font-size:12px">${esc(r.time)}</span></span><span style="font-size:13px;letter-spacing:1px">${'⭐'.repeat(r.rating || 0)}</span></div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">${chip('#f3ece0', '#8a7050', clock + esc(r.duration || '—'))}${chip(ss[0], ss[1], flag + esc(r.smooth))}${r.color ? chip('#f3ece0', '#8a7050', drop + esc(r.color)) : ''}${r.didWhat ? chip('#f3ece0', '#8a7050', run + '动作 ' + esc(r.didWhat)) : ''}</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">${chip('#f3ece0', '#8a7050', clock + esc(r.duration || '—'))}${chip(ss[0], ss[1], flag + esc(r.smooth))}${r.color ? chip('#f3ece0', '#8a7050', drop + esc(r.color)) : ''}</div>
+        ${r.didWhat ? `<div style="margin-top:9px;font-size:13px;color:#8a7050;display:flex;gap:6px;align-items:flex-start;line-height:1.5"><span style="flex-shrink:0;display:inline-flex;align-items:center;gap:4px;white-space:nowrap">${run}动作</span><span style="word-break:break-word;min-width:0;flex:1">${esc(r.didWhat)}</span></div>` : ''}
         ${r.shape ? `<div style="margin-top:10px;font-size:13.5px;color:#444;line-height:1.5">📋 ${esc(r.shape)}</div>` : ''}
         ${r.comment ? `<div style="margin-top:8px;font-size:13px;color:#8a7050;background:#faf6ef;border-radius:8px;padding:8px 10px;line-height:1.5">"${esc(r.comment)}"</div>` : ''}
       </div>`;
@@ -9935,7 +9936,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v324 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v325 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

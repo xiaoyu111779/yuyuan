@@ -1347,7 +1347,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
         date: clip(x && x.date, 12), time: clip(x && x.time, 10), duration: clip(x && x.duration, 12),
         shape: clip(x && x.shape, 50), color: clip(x && x.color, 16),
         smooth: OK.indexOf(x && x.smooth) >= 0 ? x.smooth : '一般',
-        didWhat: clip(x && x.didWhat, 20), comment: clip(x && x.comment, 120),
+        didWhat: clip(x && x.didWhat, 60), comment: clip(x && x.comment, 120),
         rating: Math.min(5, Math.max(1, parseInt(x && x.rating) || 3)),
       })).filter(x => x.shape || x.time),
     };
@@ -1798,7 +1798,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     const drop = li('<path d="M12 3.5s5.5 6 5.5 10a5.5 5.5 0 0 1-11 0C6.5 9.5 12 3.5 12 3.5z"/>');
     const flag = li('<path d="M6 3.5v17M6 5h11l-2 3 2 3H6"/>');
     const run = li('<circle cx="13" cy="5" r="1.6"/><path d="M6 21l3-5 3 2 1-4M9 16l-1-4 4-2 3 3 2 1"/>');
-    const chip = (bg, c, inner) => `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;border-radius:11px;padding:3px 9px;background:${bg};color:${c}">${inner}</span>`;
+    const chip = (bg, c, inner) => `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;border-radius:11px;padding:3px 9px;background:${bg};color:${c};white-space:normal;word-break:break-word;max-width:100%;line-height:1.35">${inner}</span>`;
     const smoothSty = (s) => s === '通畅' ? ['#e7f6ec', '#1a9c4e'] : (s === '一般' ? ['#fdf3df', '#c78a12'] : ['#ffe9e6', '#d6492f']);
     const recs = (p.records || []).map(r => {
       const ss = smoothSty(r.smooth);
@@ -9931,7 +9931,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v320 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v322 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

@@ -696,8 +696,9 @@
         generateRaw(params),
         new Promise((_, rej) => setTimeout(() => rej(new Error('生成超时(180秒未返回)')), 180000)),
       ]);
-      const text = typeof result === 'string' ? result : (result && result.content) || '';
+      let text = typeof result === 'string' ? result : (result && result.content) || '';
       if (!text) toastr.warning('主API返回为空,检查酒馆主连接是否正常');
+      text = applyBanWords(d0, text);
       return text;
     } catch (e) {
       console.error('[XHS] API error', e);
@@ -1163,8 +1164,9 @@ ${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n
     const role = getRoleDesc() || '';
     const wb = await getWorldbookContent(3000, 30);
     const uname = d0.userName || '我';
+    const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」网易云音乐里【最近播放】的歌,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情和【此刻心情】来选歌,不许 OOC。
-【${cname} 的人设/性格】:\n${role}
+【${cname} 的人设/性格】:\n${role}${ubio ? `\n【${uname}(机主在乎/在意的人)的资料,写到 ta 时要贴合】:${ubio}` : ''}
 ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
 要求:
 - 选【最多 6 首】歌,符合 ta 的【真实音乐品味(看人设:年龄、性格、职业、文化背景)】和【当前心情/处境】。歌单是 ta 内心的投射:外表冷静的人可能在反复循环很丧/很烫的歌。
@@ -1201,8 +1203,9 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     const role = getRoleDesc() || '';
     const wb = await getWorldbookContent(3000, 30);
     const uname = d0.userName || '我';
+    const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」淘宝里的内容,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC、不许编造跟设定冲突的东西。买什么要符合 ta 的【身份/经济状况/喜好/当前处境】。
-【${cname} 的人设/性格】:\n${role}
+【${cname} 的人设/性格】:\n${role}${ubio ? `\n【${uname}(机主在乎/在意的人)的资料,写到 ta 时要贴合】:${ubio}` : ''}
 ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
 要生成:
 - vip:ta 的会员等级(如"88VIP""超级会员",或留空,看人设)。
@@ -1245,8 +1248,9 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     const role = getRoleDesc() || '';
     const wb = await getWorldbookContent(3000, 30);
     const uname = d0.userName || '我';
+    const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」支付宝里的内容,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC。金额要符合 ta 的【身份/经济状况】(明星/总裁和学生差很多)。
-【${cname} 的人设/性格】:\n${role}
+【${cname} 的人设/性格】:\n${role}${ubio ? `\n【${uname}(机主在乎/在意的人)的资料,写到 ta 时要贴合】:${ubio}` : ''}
 ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
 要生成:
 - balance:零钱余额(数字)。
@@ -1283,8 +1287,9 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     const role = getRoleDesc() || '';
     const wb = await getWorldbookContent(3000, 30);
     const uname = d0.userName || '我';
+    const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」和「豆包」(一个 AI 助手 app)的一段聊天记录,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC。
-【${cname} 的人设/性格】:\n${role}
+【${cname} 的人设/性格】:\n${role}${ubio ? `\n【${uname}(机主在乎/在意的人)的资料,写到 ta 时要贴合】:${ubio}` : ''}
 ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
 生成 4 条消息,顺序严格是:① ${cname} 先抛出【一件事】——可以是一个生活问题,或者倾诉一桩烦心事/纠结/情绪(符合人设和当前剧情,是 ta 私下才会跟 AI 念叨的那种,可搞笑、可暴露 ta 的小情绪/小秘密、可和 ${uname} 有关);② 豆包回复;③ ${cname}【顺着豆包刚才的回复往下接】——是对豆包那番话的反应(吐槽、无语、将信将疑、被绕得更懵、或者反驳),**不是再问一个新问题**;④ 豆包再回复一次。
 豆包的语气要【非常"豆包"】:极度热情、体贴到用力过猛、特爱拍胸脯打包票,满嘴排比和夸张承诺还爱加 emoji,就这个味儿——"我相信你,你一定能搞定""别怕,我陪着你,我一直都在""我帮你把这事儿拆解得明明白白,不焦虑、不踩坑👇""我给你最直接、最真相、最不绕弯、最一针见血的结论""绝对精准、不忽悠""有我给你兜底,放心去做吧"。
@@ -2819,6 +2824,29 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     return `\n【同人文·每条必须各不相同】下面给每条一个随机灵感种子,请据此让它们的走向、结构、语气【明显拉开差异】,别千篇一律、别来回用同几句话和同一个套路:\n- ${seeds.join('\n- ')}\n额外要求:开头不要都一个句式;有的多对话推进、有的纯内心独白、有的用书信/聊天体;【禁用老三样】(如"他眼神一暗""空气突然安静""心脏漏跳一拍""喉结滚动"这类烂俗句)。\n`;
   }
 
+  // 生成后【硬过滤】:按禁词表 "原词→替换"(右边 null/空=删除)对模型输出强制替换,模型不听话也兜得住
+  function applyBanWords(d, text) {
+    try {
+      if (!text) return text;
+      const ban = (d && d.banWords || '').trim();
+      if (!ban) return text;
+      let out = String(text);
+      ban.split('\n').forEach(lineRaw => {
+        const line = (lineRaw || '').trim();
+        if (!line) return;
+        const sep = line.indexOf('→') >= 0 ? '→' : (line.indexOf('->') >= 0 ? '->' : null);
+        if (!sep) return; // 没箭头(如"严禁…句式")机械替换做不了,交给 prompt 软约束
+        const idx = line.indexOf(sep);
+        const left = line.slice(0, idx);
+        const right = line.slice(idx + sep.length).trim();
+        const repl = (right === 'null' || right === 'NULL' || right === '') ? '' : right.replace(/["'`\\]/g, '');
+        left.split(/[\/、|]/).map(s => s.trim()).filter(Boolean).forEach(w => {
+          if (w) out = out.split(w).join(repl);
+        });
+      });
+      return out;
+    } catch (e) { return text; }
+  }
   function styleHint(d, strict) {
     const ref = (d && d.styleRef || '').trim();
     const ban = (d && d.banWords || '').trim();
@@ -9936,7 +9964,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v325 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v326 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

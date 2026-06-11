@@ -706,17 +706,40 @@
     }
   }
 
+  // 转义 JSON 字符串内部的裸换行/制表/控制符(长同人文最常见的解析失败原因:正文里有真实换行)
+  function sanitizeJsonStr(s) {
+    let out = '', inStr = false, esc = false;
+    for (let idx = 0; idx < s.length; idx++) {
+      const ch = s[idx];
+      if (esc) { out += ch; esc = false; continue; }
+      if (ch === '\\') { out += ch; esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; out += ch; continue; }
+      if (inStr) {
+        if (ch === '\n') { out += '\\n'; continue; }
+        if (ch === '\r') { out += '\\r'; continue; }
+        if (ch === '\t') { out += '\\t'; continue; }
+        const code = ch.charCodeAt(0);
+        if (code < 0x20) { out += '\\u' + code.toString(16).padStart(4, '0'); continue; }
+      }
+      out += ch;
+    }
+    return out;
+  }
   function tryParseJSON(raw, fallback = null) {
     if (!raw) return fallback;
-    try {
-      let s = raw.replace(/```json|```/g, '').trim();
-      const i = s.indexOf('{'), j = s.lastIndexOf('}');
-      const k = s.indexOf('['), l = s.lastIndexOf(']');
-      const useArr = (k >= 0 && l > k) && (i < 0 || k < i);
-      if (useArr) s = s.slice(k, l + 1);
-      else if (i >= 0 && j > i) s = s.slice(i, j + 1);
-      return JSON.parse(s);
-    } catch (e) { return fallback; }
+    let s0 = raw.replace(/```json|```/g, '').trim();
+    const i = s0.indexOf('{'), j = s0.lastIndexOf('}');
+    const k = s0.indexOf('['), l = s0.lastIndexOf(']');
+    const useArr = (k >= 0 && l > k) && (i < 0 || k < i);
+    let s = s0;
+    if (useArr) s = s0.slice(k, l + 1);
+    else if (i >= 0 && j > i) s = s0.slice(i, j + 1);
+    const noTrail = (x) => x.replace(/,\s*([}\]])/g, '$1'); // 去尾随逗号
+    const attempts = [s, noTrail(s), noTrail(sanitizeJsonStr(s))];
+    for (const a of attempts) {
+      try { return JSON.parse(a); } catch (e) {}
+    }
+    return fallback;
   }
 
   // ============ 同步到主对话 ============
@@ -3170,6 +3193,7 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
 🚨【最重要·必须真正展开成故事,绝不许只点题】:每一篇都要是一个【完整的小故事】——有铺垫、有具体场景、有情节推进、有人物对话、有情绪起伏、有收尾。把那个梗/桥段当成故事的【核心事件演出来】,而不是一句话概括。【绝对禁止】只写个梗概、只提一下设定、只点一句题就草草结束、或泛泛叙述带过。宁可把一个梗写透写满,也不要蜻蜓点水。非聊天体的正文请写够 ${wMin}~${wMax} 字。
 【未成年角色绝对不可以,只写成年人;可暧昧虐心擦边,但不写露骨性行为细节。】${(d0.styleRef || '').trim() ? `\n【同人文笔风·优先遵守】:${(d0.styleRef || '').trim()}\n` : ''}${styleHint(d0, true)}
 每篇给:type("text"或"chat")、author(写手网名)、title(<25字,够吸引人)、coverText(一句话简介/钩子)、content(正文,按体裁写;聊天体则是开头那段恋爱日记)、tags(["骨科","酸涩","HE"] 这种)、chatlog(仅 chat 体给)。
+🚨【输出格式硬性要求·否则解析失败全篇作废】:① content / coverText / text 等所有正文字段里,对话和强调【一律用中文引号「」『』】,【绝对禁止出现英文双引号 "】(它会直接破坏 JSON);② 正文要分段就正常换行;③ 确保整个输出是一个【能被 JSON.parse 的合法 JSON】,别在字符串里留没转义的特殊符号。
 严格 JSON,不要解释:
 {"fics":[{"type":"text或chat","author":"网名","title":"...","coverText":"...","content":"...","tags":["tag"],"chatlog":[{"side":"l或r","name":"昵称","text":"..."}]}]}\n(chatlog 只在 type=chat 时给)`;
     const raw = await callXhsAPI(sys + storyTimeAsk(d0), `写 ${n} 篇真正展开的同人文短篇`, { noContext: true });
@@ -3197,6 +3221,10 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
         likes: Math.floor(Math.random() * 9000) + 100, comments: [],
       };
     });
+    if (!newFics.length) {
+      toastr.warning('同人文返回了内容但没解析出来——多半是①输出被【截断】(模型「最大回复长度/max tokens」设太小,调大它;或把篇数降到 1~2、字数调低),或②长文里的引号/换行让 JSON 失效。已加强容错仍失败的话,【减篇数 + 降字数】后重试最有效', '', { timeOut: 11000 });
+      return;
+    }
     // 追加式:新写的放最前,保留旧的,按 标题|作者 去重,封顶 40 篇
     const prev = (d.ficFeed || []);
     const seen = new Set(newFics.map(p => (p.title || '') + '|' + (p.author || '')));
@@ -9895,7 +9923,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v318 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v319 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

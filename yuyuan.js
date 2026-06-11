@@ -2066,6 +2066,10 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
       </div>
       <div class="xhs-scroll" style="padding:14px">
         <div class="xhs-set-hint">手机通用设置,小红书和微信都生效</div>
+        <div class="xhs-pub-row" style="display:flex;align-items:center;gap:8px;margin:4px 0 8px">
+          <input type="checkbox" id="set-hide-fab" ${(() => { try { return getTop().localStorage.getItem('xhs_yuyuan_fab_hidden') === '1' ? 'checked' : ''; } catch (e) { return ''; } })()} style="width:auto"/>
+          <label style="margin:0">隐藏桌面悬浮球 📱(隐藏后用聊天框输入 <b>/yuyuan</b> 还能打开)</label>
+        </div>
 
         <details class="xhs-set-section">
           <summary class="xhs-set-title">🎭 角色绑定(全局)</summary>
@@ -8126,6 +8130,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     if (has('set-charphone-bg')) { d.charPhoneBg = (readInputCache('set-charphone-bg') || '').trim(); }
     if (has('set-cplockbg')) { d.charPhoneLockBg = (readInputCache('set-cplockbg') || '').trim(); }
     if (has('set-cp-darktext')) { d.charPhoneTextColor = chk('set-cp-darktext') ? 'dark' : 'light'; }
+    if (has('set-hide-fab')) { try { getTop().localStorage.setItem('xhs_yuyuan_fab_hidden', chk('set-hide-fab') ? '1' : '0'); } catch (e) {} try { ensureFab(true); } catch (e) {} }
     if (has('set-cpicon-wx')) { d.charPhoneIcons = Object.assign({}, d.charPhoneIcons, { wx: (readInputCache('set-cpicon-wx') || '').trim(), notes: (readInputCache('set-cpicon-notes') || '').trim(), safari: (readInputCache('set-cpicon-safari') || '').trim(), music: (readInputCache('set-cpicon-music') || '').trim(), taobao: (readInputCache('set-cpicon-taobao') || '').trim(), alipay: (readInputCache('set-cpicon-alipay') || '').trim(), doubao: (readInputCache('set-cpicon-doubao') || '').trim(), poop: (readInputCache('set-cpicon-poop') || '').trim() }); }
     if (has('set-home-bgurl')) {
       const u = (readInputCache('set-home-bgurl') || '').trim();
@@ -8386,6 +8391,9 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
       const TOP = getTop();
       const doc = TOP.document;
       if (!doc || !doc.body) return false;
+      let _fabHidden = false;
+      try { _fabHidden = TOP.localStorage.getItem('xhs_yuyuan_fab_hidden') === '1'; } catch (e) {}
+      if (_fabHidden) { try { const exh = doc.getElementById('xhs-float-btn'); if (exh && exh.parentNode) exh.parentNode.removeChild(exh); } catch (e) {} return true; }
       const ex = doc.getElementById('xhs-float-btn');
       if (ex && !force) return true;
       if (ex && ex.parentNode) ex.parentNode.removeChild(ex);
@@ -9923,7 +9931,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v319 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v320 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

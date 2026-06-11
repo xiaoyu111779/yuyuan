@@ -103,6 +103,17 @@
     currentRoute: 'feed',
     routeContext: {},
     feed: [],
+    charPhone: null,        // 偷看 char 手机:{ genAt, wx:[], notes:[], safari:[] }(单人卡)
+    charPhoneBg: 'https://img.cdn1.vip/i/6a2ab1d51dc48_1781182933.webp',        // char 手机主屏背景(图片 url 或渐变)
+    charPhoneLockBg: '',    // char 手机锁屏背景(图片 url 或渐变)
+    charPhoneTextColor: 'dark', // 桌面/锁屏字体色:light 白 / dark 黑
+    charPhoneIcons: { wx: 'https://img.cdn1.vip/i/6a2aae4e1fd9d_1781182030.webp', notes: 'https://img.cdn1.vip/i/6a2aae57bc624_1781182039.webp', safari: 'https://img.cdn1.vip/i/6a2ab01033f2e_1781182480.webp', music: 'https://img.cdn1.vip/i/6a2aae68bf3da_1781182056.webp', taobao: 'https://img.cdn1.vip/i/6a2aae86e1cc3_1781182086.webp', alipay: 'https://img.cdn1.vip/i/6a2aae8698d3b_1781182086.webp', doubao: 'https://img.cdn1.vip/i/6a2ab151cbd1a_1781182801.jpg', poop: 'https://img.cdn1.vip/i/6a2ab13f8310e_1781182783.webp' },     // char 手机 app 自定义图标默认值
+    charPhoneAppIcon: 'https://img.cdn1.vip/i/6a2ab23784bf3_1781183031.jpg',   // 桌面上「ta 的手机」这个 app 自己的图标
+    charPhoneMusic: null,   // ta 的网易云:{ genAt, songs:[] }
+    charPhoneTaobao: null,  // ta 的淘宝:{ genAt, vip, saved, counts, cart:[], orders:[] }
+    charPhoneAlipay: null,  // ta 的支付宝:{ genAt, balance, yuebao, banks:[], bills:[] }
+    charPhoneDoubao: null,  // ta 的豆包:{ genAt, msgs:[{from,text}] }
+    charPhonePoop: null,    // ta 的拉屎打卡:{ genAt, streak, todayPooped, tip, records:[] }
     ficFeed: [],            // 同人文专区的帖子(替换式,每次刷新换一批)
     feedCat: 'rec',         // 发现页当前分类:rec 推荐 / fic 同人文
     feedFetchTime: 0,
@@ -954,6 +965,27 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
   function renderBody(d) {
     if (d.currentApp === 'home') return renderHome(d);
     if (d.currentApp === 'set') return renderPhoneSettings(d);
+    if (d.currentApp === 'charphone') {
+      switch (d.currentRoute) {
+        case 'cp-lock': return renderCharPhoneLock(d);
+        case 'cp-wx': return renderCharPhoneWx(d);
+        case 'cp-wx-chat': return renderCharPhoneWxChat(d);
+        case 'cp-notes': return renderCharPhoneNotes(d);
+        case 'cp-note': return renderCharPhoneNote(d);
+        case 'cp-safari': return renderCharPhoneSafari(d);
+        case 'cp-music': return renderCharPhoneMusic(d);
+        case 'cp-taobao': return renderCharPhoneTaobao(d);
+        case 'cp-tb-cart': return renderCharPhoneTbCart(d);
+        case 'cp-tb-orders': return renderCharPhoneTbOrders(d);
+        case 'cp-alipay': return renderCharPhoneAlipay(d);
+        case 'cp-ali-bills': return renderCharPhoneAliBills(d);
+        case 'cp-ali-assets': return renderCharPhoneAliAssets(d);
+        case 'cp-ali-huabei': return renderCharPhoneAliHuabei(d);
+        case 'cp-doubao': return renderCharPhoneDoubao(d);
+        case 'cp-poop': return renderCharPhonePoop(d);
+        default: return renderCharPhoneHome(d);
+      }
+    }
     if (d.currentApp === 'wx') {
       switch (d.currentRoute) {
         case 'wx-chats': return renderWxChats(d);
@@ -1017,6 +1049,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
           ${icon('xhs', '📕', '小红书', 'linear-gradient(135deg,#ff5b7f,#ff2442)', xhsBadge)}
           ${icon('wx', '💬', '微信', 'linear-gradient(135deg,#5fd36a,#1aad19)', wxBadge)}
           ${icon('set', '⚙️', '设置', 'linear-gradient(135deg,#b0b8c4,#79818c)', 0)}
+          <div class="xhs-app" data-action="open-charphone"><div class="xhs-app-icwrap"><div class="xhs-app-ic" style="background:linear-gradient(135deg,#6a5acd,#3a2a6b)">📱${d.charPhoneAppIcon ? `<img class="xhs-app-img" referrerpolicy="no-referrer" src="${esc(d.charPhoneAppIcon)}" onerror="this.style.display='none'" style="position:absolute;inset:0"/>` : ''}</div></div><span class="xhs-app-name">ta 的手机</span></div>
         </div>
       </div>`;
   }
@@ -1036,6 +1069,712 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
     await saveData(d);
     refreshXhs();
     updateXhsClock();
+  }
+  // ============ 偷看 char 的手机(单人卡) ============
+  async function genCharPhone() {
+    const d0 = loadData();
+    if (isMultiCast(d0)) { toastr.info('「ta 的手机」目前只支持单人卡'); return; }
+    toastr.info('正在偷看 ta 的手机…');
+    const cname = charDisplayName(d0);
+    const role = getRoleDesc() || '';
+    const wb = await getWorldbookContent(4000, 40);
+    const uname = d0.userName || '我';
+    const ubio = (d0.userBio || '').trim();
+    const sys = `你要生成「${cname}」这个人【自己手机里】的私密内容,供上帝视角偷看。一切都【严格基于 ta 的人设、世界书设定、当前主线剧情】,不许 OOC、不许编造跟设定冲突的人和事。
+【${cname} 的人设/性格】:\n${role}
+${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n` : ''}${ubio ? `【${uname}(机主在意的人)的资料】:${ubio}\n` : ''}
+要生成三部分:
+1) wx(微信):ta 和【世界书里其他 NPC】的私聊。按【ta 和每个 NPC 各自的人设、以及世界书设定】来写,贴合设定和当前剧情。给 3~6 个联系人(家人/朋友/同事/老板/暧昧对象/前任等——看世界书和人设里【真实存在】谁,别硬编),每人 2~6 条来回。视角是 ta 的手机:ta 自己发的标 "ta",对方标 "them"。每个联系人再给 time:你俩【最后说话的时间标签】(像"刚刚""昨天 22:10""周二""3天前"),不同联系人时间【各不相同】(有的刚聊、有的很久没聊),像真实微信列表。要透出潜台词(ta 私下怎么评价 ${uname}、ta 的秘密、ta 真实的状态情绪),但不许跟人设剧情冲突。
+2) notes(备忘录):ta 的待办事项,以及 ta 自己的事/碎碎念/计划/灵感(都按 ta 的人设来写,贴合剧情)。
+3) safari(搜索记录):ta 最近的浏览器搜索,要做到:①【反差】暴露 ta 真实的恐惧/无知/渴望/纠结,跟 ta 外在的冷静强硬相反;②【递进】几条之间体现思维变化(理智查询→情绪失控,或犹豫→坚定);③【真实】模仿真人搜索关键词习惯,用破碎短句或具体名词,【别写成完整句子】。每条给:query(搜索词)、time(这条搜的时间点,短标签,像"刚刚""凌晨2:41""昨天 23:10";失眠递进可以都落在深夜)、inner(ta 搜到答案后的【内心戏】,当时心里怎么想,1~3 句,可与外在反差)。${cpAttitudeRule(uname)}
+严格 JSON,不要解释:
+{"wx":[{"name":"联系人名","relation":"和ta的关系","time":"昨天 22:10","msgs":[{"from":"ta或them","text":"..."}]}],"notes":[{"title":"便签标题","body":"便签正文"}],"safari":[{"query":"搜索词(短、碎)","time":"凌晨2:41","inner":"搜到后的内心戏"}]}`;
+    const raw = await callXhsAPI(sys, `生成 ${cname} 手机里的微信/备忘录/搜索记录`);
+    if (!raw) { toastr.error('没偷看成功(模型没返回),再点一次🔄'); return; }
+    const j = tryParseJSON(raw, null);
+    if (!j || (!Array.isArray(j.wx) && !Array.isArray(j.notes) && !Array.isArray(j.safari))) { toastr.warning('这次没解析出内容,再点一次🔄'); return; }
+    const d = loadData();
+    d.charPhone = {
+      genAt: Date.now(),
+      wx: (Array.isArray(j.wx) ? j.wx : []).slice(0, 8).map(c => ({
+        name: String(c.name || '联系人').slice(0, 16),
+        relation: String(c.relation || '').slice(0, 20),
+        time: String(c.time || '').slice(0, 12),
+        msgs: (Array.isArray(c.msgs) ? c.msgs : []).slice(0, 12).map(m => ({ from: m.from === 'ta' ? 'ta' : 'them', text: String(m.text || '').slice(0, 200) })).filter(m => m.text),
+      })).filter(c => c.msgs.length),
+      notes: (Array.isArray(j.notes) ? j.notes : []).slice(0, 10).map(n => ({ title: String(n.title || '').slice(0, 30), body: String(n.body || '').slice(0, 600) })).filter(n => n.title || n.body),
+      safari: (Array.isArray(j.safari) ? j.safari : []).slice(0, 14).map(s => ({ query: String(s.query || '').slice(0, 60), time: String(s.time || '').slice(0, 12), inner: String(s.inner || '').slice(0, 300) })).filter(s => s.query),
+    };
+    await saveData(d);
+    refreshXhs();
+    toastr.success('✓ 偷看完成');
+  }
+  async function genCharMusic() {
+    const d0 = loadData();
+    if (isMultiCast(d0)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
+    toastr.info('正在看 ta 最近听什么…');
+    const cname = charDisplayName(d0);
+    const role = getRoleDesc() || '';
+    const wb = await getWorldbookContent(3000, 30);
+    const uname = d0.userName || '我';
+    const sys = `你要生成「${cname}」网易云音乐里【最近播放】的歌,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情和【此刻心情】来选歌,不许 OOC。
+【${cname} 的人设/性格】:\n${role}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}
+要求:
+- 选【最多 6 首】歌,符合 ta 的【真实音乐品味(看人设:年龄、性格、职业、文化背景)】和【当前心情/处境】。歌单是 ta 内心的投射:外表冷静的人可能在反复循环很丧/很烫的歌。
+- 每首给 loops:ta 循环过的【次数】(整数,越戳 ta 心的循环越多,几次到几百次都真实)。
+- 给【其中 2~4 首】歌写 comment + likes + date:comment 是 ta 在这首歌评论区底下留过的话——可以是【说这歌哪里好、为什么喜欢】,也可以是【ta emo 时借歌抒发的真实心事/想对谁说没说出口的话】(像网易云那种戳心热评的口吻,1~3句,【用 ta 自己的话,不要照搬歌词】);likes 是被点赞数(几十到几千);date 是留言日期(如"06-08")。其余歌【不要】comment。
+- 【绝对不要写任何歌词】,只写歌名、歌手、循环次数、ta 的留言。歌要真实存在、对得上歌手。${cpAttitudeRule(uname)}
+严格 JSON,不要解释:
+{"songs":[{"title":"歌名","artist":"歌手","loops":87,"comment":"(2~4首有)ta的留言","likes":326,"date":"06-08"}]}`;
+    const raw = await callXhsAPI(sys, `生成 ${cname} 最近在听的歌`);
+    if (!raw) { toastr.error('没看成功(模型没返回),再点一次 ↻'); return; }
+    const j = tryParseJSON(raw, null);
+    if (!j || !Array.isArray(j.songs)) { toastr.warning('这次没解析出歌单,再点一次 ↻'); return; }
+    const clip = (s, n) => String(s || '').slice(0, n);
+    const d = loadData();
+    d.charPhoneMusic = {
+      genAt: Date.now(),
+      songs: j.songs.slice(0, 6).map(x => ({
+        title: clip(x && x.title, 40), artist: clip(x && x.artist, 30),
+        loops: Math.max(0, parseInt(x && x.loops) || 0),
+        comment: clip(x && x.comment, 200),
+        likes: Math.max(0, parseInt(x && x.likes) || 0),
+        date: clip(x && x.date, 12),
+      })).filter(s => s.title),
+    };
+    await saveData(d);
+    refreshXhs();
+    toastr.success('✓ 看完了 ta 在听什么');
+  }
+  async function genCharTaobao() {
+    const d0 = loadData();
+    if (isMultiCast(d0)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
+    toastr.info('正在翻 ta 的淘宝…');
+    const cname = charDisplayName(d0);
+    const role = getRoleDesc() || '';
+    const wb = await getWorldbookContent(3000, 30);
+    const uname = d0.userName || '我';
+    const sys = `你要生成「${cname}」淘宝里的内容,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC、不许编造跟设定冲突的东西。买什么要符合 ta 的【身份/经济状况/喜好/当前处境】。
+【${cname} 的人设/性格】:\n${role}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}
+要生成:
+- vip:ta 的会员等级(如"88VIP""超级会员",或留空,看人设)。
+- saved:累计省钱金额(整数,看人设消费力)。
+- cart:购物车里 ta 加购还没买的 3~7 件,要能【暴露 ta 真实的兴趣/小秘密/正在盘算的事】。每件:mall("淘宝"或"天猫"), shop 店铺名, title 商品名, spec 规格(颜色/型号/尺码), price 现价数字, origPrice 原价数字(≥现价), qty 数量。
+- orders:ta 的订单 5~9 笔。每笔:mall, shop, title, spec, price, date(如"06-08"),以及 status(必须是下面之一):
+  · "topay"=待付款(还没付钱);"toship"=待发货(付了还没发);"torecv"=待收货(在路上还没到);"reviewed"=已收到并评价过;"refund"=退款/售后中。
+  · 大部分订单应是 "reviewed":给它 review = ta 对这商品写的评价(符合 ta 口吻,可吐槽可真情实感,1~2句)。
+  · 只有真的退过货/在售后的才用 "refund":给它 complaint = ta 退货或售后时的吐槽(可空着不写,但别硬造退货)。
+  · "toship""torecv" 是还没到手的,数量要真实(别把已买到的塞进来)。
+  · review 只在 reviewed 上有,complaint 只在 refund 上有,其余留空。${cpAttitudeRule(uname)}
+严格 JSON,不要解释:
+{"vip":"88VIP","saved":35600,"cart":[{"mall":"淘宝","shop":"店铺","title":"商品","spec":"规格","price":1599,"origPrice":1999,"qty":1}],"orders":[{"mall":"天猫","shop":"店铺","title":"商品","spec":"规格","price":59,"date":"06-08","status":"reviewed","review":"ta的评价","complaint":""}]}`;
+    const raw = await callXhsAPI(sys, `生成 ${cname} 的淘宝购物车和订单`);
+    if (!raw) { toastr.error('没翻成功(模型没返回),再点一次 ↻'); return; }
+    const j = tryParseJSON(raw, null);
+    if (!j || (!Array.isArray(j.cart) && !Array.isArray(j.orders))) { toastr.warning('这次没解析出内容,再点一次 ↻'); return; }
+    const clip = (s, n) => String(s || '').slice(0, n);
+    const num = (v) => Math.max(0, Math.round((parseFloat(v) || 0) * 100) / 100);
+    const ig = (v) => Math.max(0, parseInt(v) || 0);
+    const mall = (v) => String(v || '').indexOf('天猫') >= 0 ? '天猫' : '淘宝';
+    const OK = ['topay', 'toship', 'torecv', 'reviewed', 'refund'];
+    const d = loadData();
+    d.charPhoneTaobao = {
+      genAt: Date.now(),
+      vip: clip(j.vip, 10),
+      saved: ig(j.saved),
+      cart: (Array.isArray(j.cart) ? j.cart : []).slice(0, 8).map(x => { const p = num(x && x.price); return { mall: mall(x && x.mall), shop: clip(x && x.shop, 24), title: clip(x && x.title, 60), spec: clip(x && x.spec, 30), price: p, origPrice: Math.max(p, num(x && x.origPrice)), qty: Math.max(1, ig(x && x.qty) || 1) }; }).filter(x => x.title),
+      orders: (Array.isArray(j.orders) ? j.orders : []).slice(0, 10).map(x => { const st = OK.indexOf(x && x.status) >= 0 ? x.status : 'reviewed'; return { mall: mall(x && x.mall), shop: clip(x && x.shop, 24), title: clip(x && x.title, 60), spec: clip(x && x.spec, 30), price: num(x && x.price), date: clip(x && x.date, 12), status: st, review: st === 'reviewed' ? clip(x && x.review, 200) : '', complaint: st === 'refund' ? clip(x && x.complaint, 200) : '' }; }).filter(x => x.title),
+    };
+    await saveData(d);
+    refreshXhs();
+    toastr.success('✓ 翻完了 ta 的淘宝');
+  }
+  async function genCharAlipay() {
+    const d0 = loadData();
+    if (isMultiCast(d0)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
+    toastr.info('正在查 ta 的支付宝…');
+    const cname = charDisplayName(d0);
+    const role = getRoleDesc() || '';
+    const wb = await getWorldbookContent(3000, 30);
+    const uname = d0.userName || '我';
+    const sys = `你要生成「${cname}」支付宝里的内容,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC。金额要符合 ta 的【身份/经济状况】(明星/总裁和学生差很多)。
+【${cname} 的人设/性格】:\n${role}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}
+要生成:
+- balance:零钱余额(数字)。
+- yuebao:余额宝金额(数字)。
+- banks:绑定的银行卡存款,1~3 张,每张 {name 银行卡名(如"招商银行(8888)"), amount 金额}。
+- bills:最近账单 8~12 笔,要【暴露 ta 的钱花在哪、收入哪来、小秘密】(转账备注、买的东西、医药费、偷偷给 ${uname} 花的钱、深夜的消费 等,和人设剧情呼应)。每笔:title 商家/事项, amount 金额数字(正数), type "out"支出 或 "in"收入, time 时间标签(如"今天 23:10""06-07"), note 备注/分类(可空), cat 分类(下面之一:餐饮/购物/转账/出行/医疗/缴费/娱乐/收入/其他)。
+- huabei:花呗使用情况。owed=当前待还(借了还没还的钱,数字), repaid=本期已还(数字), limit=花呗额度(数字)。ta 不用花呗就都填 0。${cpAttitudeRule(uname)}
+严格 JSON,不要解释:
+{"balance":1280.5,"yuebao":52000,"banks":[{"name":"招商银行(8888)","amount":128000}],"huabei":{"owed":0,"repaid":0,"limit":5000},"bills":[{"title":"商家或事项","amount":35,"type":"out","time":"今天 22:10","note":"备注","cat":"餐饮"}]}`;
+    const raw = await callXhsAPI(sys, `生成 ${cname} 的支付宝余额和账单`);
+    if (!raw) { toastr.error('没查成功(模型没返回),再点一次 ↻'); return; }
+    const j = tryParseJSON(raw, null);
+    if (!j || (!Array.isArray(j.bills) && j.balance == null)) { toastr.warning('这次没解析出内容,再点一次 ↻'); return; }
+    const clip = (s, n) => String(s || '').slice(0, n);
+    const num = (v) => Math.round((parseFloat(v) || 0) * 100) / 100;
+    const d = loadData();
+    d.charPhoneAlipay = {
+      genAt: Date.now(),
+      balance: num(j.balance),
+      yuebao: num(j.yuebao),
+      banks: (Array.isArray(j.banks) ? j.banks : []).slice(0, 4).map(x => ({ name: clip(x && x.name, 30), amount: num(x && x.amount) })).filter(x => x.name),
+      huabei: (() => { const h = j.huabei || {}; return { owed: Math.max(0, num(h.owed)), repaid: Math.max(0, num(h.repaid)), limit: Math.max(0, num(h.limit)), note: clip(h.note, 200) }; })(),
+      bills: (Array.isArray(j.bills) ? j.bills : []).slice(0, 14).map(x => ({ title: clip(x && x.title, 40), amount: num(x && x.amount), type: x && x.type === 'in' ? 'in' : 'out', time: clip(x && x.time, 14), note: clip(x && x.note, 30), cat: clip(x && x.cat, 6) || '其他' })).filter(x => x.title),
+    };
+    await saveData(d);
+    refreshXhs();
+    toastr.success('✓ 查完了 ta 的支付宝');
+  }
+  async function genCharDoubao() {
+    const d0 = loadData();
+    if (isMultiCast(d0)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
+    toastr.info('正在偷看 ta 的豆包…');
+    const cname = charDisplayName(d0);
+    const role = getRoleDesc() || '';
+    const wb = await getWorldbookContent(3000, 30);
+    const uname = d0.userName || '我';
+    const sys = `你要生成「${cname}」和「豆包」(一个 AI 助手 app)的一段聊天记录,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC。
+【${cname} 的人设/性格】:\n${role}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}
+生成 4 条消息,顺序严格是:① ${cname} 先抛出【一件事】——可以是一个生活问题,或者倾诉一桩烦心事/纠结/情绪(符合人设和当前剧情,是 ta 私下才会跟 AI 念叨的那种,可搞笑、可暴露 ta 的小情绪/小秘密、可和 ${uname} 有关);② 豆包回复;③ ${cname}【顺着豆包刚才的回复往下接】——是对豆包那番话的反应(吐槽、无语、将信将疑、被绕得更懵、或者反驳),**不是再问一个新问题**;④ 豆包再回复一次。
+豆包的语气要【非常"豆包"】:极度热情、体贴到用力过猛、特爱拍胸脯打包票,满嘴排比和夸张承诺还爱加 emoji,就这个味儿——"我相信你,你一定能搞定""别怕,我陪着你,我一直都在""我帮你把这事儿拆解得明明白白,不焦虑、不踩坑👇""我给你最直接、最真相、最不绕弯、最一针见血的结论""绝对精准、不忽悠""有我给你兜底,放心去做吧"。
+【硬性要求】豆包每一条回复的第一句,都必须用这种招牌开场白开头:要么是「我给你最X、最X、最X……」的连环排比,要么是「我来帮你把这件事拆解得明明白白,不X、不X👇」这种句式。X 里的形容词每次都随机换、别老重复(可选:最直接/最真相/最客观/最硬核/最干脆/最不绕弯/最一针见血/最戳痛点/最不墨迹/不焦虑/不踩坑/不忽悠…),保证每次生成开场白都不一样。开场白说完再接正文。
+但是关键:豆包给的建议/分析要【其实不太靠谱、甚至是错的、有点离谱】,专门制造节目效果——一本正经地出馊主意、把简单的事整复杂、或者自信满满地胡说歪理,让 ${cname} 哭笑不得。(只要搞笑跑偏就行,别给真的危险、违法或有害的建议。)
+每条 {from:"char"(${cname}发的) 或 "ai"(豆包发的), text:内容}。${cpAttitudeRule(uname)}
+严格 JSON,不要解释:
+{"msgs":[{"from":"char","text":"..."},{"from":"ai","text":"..."},{"from":"char","text":"..."},{"from":"ai","text":"..."}]}`;
+    const raw = await callXhsAPI(sys, `生成 ${cname} 和豆包的对话`);
+    if (!raw) { toastr.error('没偷看成功(模型没返回),再点一次 ↻'); return; }
+    const j = tryParseJSON(raw, null);
+    if (!j || !Array.isArray(j.msgs)) { toastr.warning('这次没解析出内容,再点一次 ↻'); return; }
+    const clip = (s, n) => String(s || '').slice(0, n);
+    const d = loadData();
+    d.charPhoneDoubao = { genAt: Date.now(), msgs: j.msgs.slice(0, 10).map(m => ({ from: m && m.from === 'ai' ? 'ai' : 'char', text: clip(m && m.text, 500) })).filter(m => m.text) };
+    await saveData(d);
+    refreshXhs();
+    toastr.success('✓ 偷看完 ta 的豆包');
+  }
+  async function genCharPoop() {
+    const d0 = loadData();
+    if (isMultiCast(d0)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
+    toastr.info('正在查 ta 今天拉了没…');
+    const cname = charDisplayName(d0);
+    const role = getRoleDesc() || '';
+    const wb = await getWorldbookContent(3000, 30);
+    const uname = d0.userName || '我';
+    const sys = `你要生成「${cname}」手机里【拉屎打卡】app 的内容,供上帝视角偷看。纯搞笑向,但要符合 ta 的人设/身体状况/当前处境(压力大可能便秘、吃辣喝大可能拉肚子、作息乱、出差水土不服 等,和世界书剧情呼应)。可以损可以好笑,但别写得太重口恶心。
+【${cname} 的人设/性格】:\n${role}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}
+要生成:
+- streak:ta 连续打卡的天数(整数)。
+- todayPooped:今天到现在拉没拉(true 或 false,看 ta 状态,可以没拉)。
+- tip:「健康小助手」给 ta 的一句搞笑提示(根据 ta 最近状态,如多喝水、少吃辣、别老蹲坑玩手机)。
+- records:最近 3~6 次如厕记录(第一笔是最近一次/今天)。每笔:
+  · date 日期标签(如"今天""昨天""06-08")
+  · time 入厕时间(如"14:30")
+  · duration 蹲了多久(如"8分钟")
+  · shape 形状/质地的搞笑形容(如"金黄香蕉一气呵成""干硬小石子费了老劲""稀软不成形·警告")
+  · color 颜色(如"健康黄褐""偏深")
+  · smooth 顺畅度,只能从这几个里选:通畅 / 一般 / 费劲 / 便秘 / 拉肚子
+  · didWhat ta 蹲坑时在干啥(刷手机/打游戏/回消息/发呆/看视频 等,可暴露 ta 私下状态)
+  · comment ta 自己的一句吐槽/心声(符合人设口吻,可空)
+  · rating 今日如厕体验,1~5 的整数星${cpAttitudeRule(uname)}
+严格 JSON,不要解释:
+{"streak":12,"todayPooped":true,"tip":"...","records":[{"date":"今天","time":"14:30","duration":"8分钟","shape":"金黄香蕉,一气呵成","color":"健康黄褐","smooth":"通畅","didWhat":"刷手机","comment":"...","rating":4}]}`;
+    const raw = await callXhsAPI(sys, `生成 ${cname} 的拉屎打卡记录`);
+    if (!raw) { toastr.error('没查成功(模型没返回),再点一次 ↻'); return; }
+    const j = tryParseJSON(raw, null);
+    if (!j || !Array.isArray(j.records)) { toastr.warning('这次没解析出记录,再点一次 ↻'); return; }
+    const clip = (s, n) => String(s || '').slice(0, n);
+    const OK = ['通畅', '一般', '费劲', '便秘', '拉肚子'];
+    const d = loadData();
+    d.charPhonePoop = {
+      genAt: Date.now(),
+      streak: Math.max(0, parseInt(j.streak) || 0),
+      todayPooped: !!j.todayPooped,
+      tip: clip(j.tip, 80),
+      records: j.records.slice(0, 6).map(x => ({
+        date: clip(x && x.date, 12), time: clip(x && x.time, 10), duration: clip(x && x.duration, 12),
+        shape: clip(x && x.shape, 50), color: clip(x && x.color, 16),
+        smooth: OK.indexOf(x && x.smooth) >= 0 ? x.smooth : '一般',
+        didWhat: clip(x && x.didWhat, 20), comment: clip(x && x.comment, 120),
+        rating: Math.min(5, Math.max(1, parseInt(x && x.rating) || 3)),
+      })).filter(x => x.shape || x.time),
+    };
+    await saveData(d);
+    refreshXhs();
+    toastr.success('✓ 查完了 ta 今天的如厕情况');
+  }
+  async function genCharAll() {
+    const d = loadData();
+    if (isMultiCast(d)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
+    toastr.info('开始刷新 ta 手机的所有 app…(会有点慢,逐个生成)');
+    try { await genCharPhone(); } catch (e) {}
+    try { await genCharMusic(); } catch (e) {}
+    try { await genCharTaobao(); } catch (e) {}
+    try { await genCharAlipay(); } catch (e) {}
+    try { await genCharDoubao(); } catch (e) {}
+    try { await genCharPoop(); } catch (e) {}
+    toastr.success('✓ ta 的手机全部刷新完成');
+  }
+  async function openCharPhone() {
+    const d = loadData();
+    if (isMultiCast(d)) { toastr.info('「ta 的手机」暂时只支持单人卡,多人卡敬请期待~'); return; }
+    d.currentApp = 'charphone';
+    d.currentRoute = 'cp-lock';
+    d.routeContext = {};
+    await saveData(d);
+    refreshXhs();
+    updateXhsClock();
+    if (!d.charPhone) genCharPhone();
+  }
+  async function cpNav(route, ctx) {
+    const d = loadData();
+    d.currentRoute = route;
+    d.routeContext = ctx || {};
+    await saveData(d);
+    refreshXhs();
+    updateXhsClock();
+  }
+  function cpRealDm(d) { return (d.dms || []).find(x => x.app === 'wx' && x.isChar && !x.castId); }
+  function cpAvatar(url, letter, size, bg) {
+    size = size || 42; const rad = Math.round(size * 0.16);
+    if (url) return `<img src="${esc(url)}" style="width:${size}px;height:${size}px;border-radius:${rad}px;object-fit:cover;flex-shrink:0"/>`;
+    return `<div style="width:${size}px;height:${size}px;border-radius:${rad}px;background:${bg || '#cfd6e4'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:${Math.round(size * 0.42)}px;flex-shrink:0">${esc((letter || '?').slice(0, 1))}</div>`;
+  }
+  function cpUserAvatar(d, size) { return cpAvatar(d.wxAvatar, d.userName || '我', size, d.avatarBg); }
+  function cpCharAvatar(d, size) { const r = cpRealDm(d); return cpAvatar(r && r.avatar, charDisplayName(d), size); }
+  function cpNpcAvatar(d, name, size) { const ct = (d.dms || []).find(x => x.app === 'wx' && (x.remark === name || x.name === name) && x.avatar); return cpAvatar(ct && ct.avatar, name, size); }
+  function cpYuan(n) { n = Number(n) || 0; return Number.isInteger(n) ? n.toLocaleString('en-US') : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function cpMallTag(m) { return m === '天猫' ? '<span style="color:#ff0036;font-weight:700;font-size:12.5px">天猫</span>' : '<span style="color:#ff5000;font-weight:700;font-size:12.5px">淘宝</span>'; }
+  function tbOrderIcon(kind) {
+    const a = 'viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="#2b2b2b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
+    const dot = (cx) => `<circle cx="${cx}" cy="11" r=".95" fill="#2b2b2b" stroke="none"/>`;
+    if (kind === 'pay') return `<svg ${a}><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M15.5 11.5h5.5v3h-5.5a1.5 1.5 0 0 1 0-3z"/></svg>`;
+    if (kind === 'ship') return `<svg ${a}><path d="M12 3.5l8.5 4-8.5 4-8.5-4 8.5-4z"/><path d="M3.5 7.5v9l8.5 4 8.5-4v-9"/><path d="M12 11.5v8.5"/></svg>`;
+    if (kind === 'recv') return `<svg ${a}><rect x="2.5" y="7" width="11" height="8" rx="1"/><path d="M13.5 9.5h4l3 3.2V15h-7z"/><circle cx="7" cy="17.5" r="1.7"/><circle cx="17.5" cy="17.5" r="1.7"/></svg>`;
+    if (kind === 'rate') return `<svg ${a}><path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H9l-4 3v-3H4A1.5 1.5 0 0 1 2.5 14V7A1.5 1.5 0 0 1 4 5.5z"/>${dot(8.5)}${dot(12)}${dot(15.5)}</svg>`;
+    return `<svg ${a}><circle cx="12" cy="12" r="9"/><path d="M8.5 8l3.5 4 3.5-4M12 12v5M9.5 13.2h5M9.5 15.5h5"/></svg>`;
+  }
+  function cpTbTabs(active) {
+    const ic = (c, p) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="${c}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const home = (c) => ic(c, '<path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z"/>');
+    const msg = (c) => ic(c, '<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>');
+    const cart = (c) => ic(c, '<path d="M3 4h2l2.2 11.3a1.5 1.5 0 0 0 1.5 1.2h8.5a1.5 1.5 0 0 0 1.5-1.2L21 8H6"/><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/>');
+    const my = (c) => ic(c, '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/>');
+    const tab = (label, route, svg, on) => `<div ${route ? `data-action="cp-open" data-route="${route}"` : ''} style="flex:1;text-align:center;cursor:${route ? 'pointer' : 'default'}"><div style="display:flex;justify-content:center">${svg(on ? '#ff5000' : '#9a9a9a')}</div><div style="font-size:10.5px;margin-top:2px;color:${on ? '#ff5000' : '#9a9a9a'}">${label}</div></div>`;
+    return `<div style="display:flex;align-items:center;padding:7px 0 9px;background:#fff;border-top:1px solid #eee;flex-shrink:0">${tab('首页', '', home, false)}${tab('消息', '', msg, false)}${tab('购物车', 'cp-tb-cart', cart, active === 'cart')}${tab('我的淘宝', 'cp-taobao', my, active === 'my')}</div>`;
+  }
+  function aliIcon(kind) {
+    const w = (bg, inner, rad) => `<span style="width:28px;height:28px;border-radius:${rad || '50%'};background:${bg};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:13px;font-weight:700">${inner}</span>`;
+    if (kind === 'bill') return w('linear-gradient(135deg,#ff9a3d,#ff5e3a)', '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M6 8h12M6 12h12M6 16h7"/></svg>', '9px');
+    if (kind === 'asset') return w('#1677ff', '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff"><path d="M12 4a8 8 0 1 0 8 8h-8z" opacity=".55"/><path d="M12 4v8h8a8 8 0 0 0-8-8z"/></svg>');
+    if (kind === 'balance') return w('#1677ff', '¥');
+    if (kind === 'yuebao') return w('linear-gradient(135deg,#ffb14e,#ff7a18)', '<span style="font-size:13px">宝</span>');
+    if (kind === 'huabei') return w('#1f8fff', '<span style="font-size:14px">花</span>');
+    if (kind === 'vip') return w('#1677ff', 'V');
+    if (kind === 'shop') return w('linear-gradient(135deg,#4d9bff,#1677ff)', '<span style="font-size:13px">商</span>', '9px');
+    return w('#1677ff', '¥');
+  }
+  function cpAliTabs(active) {
+    const ic = (c, p) => `<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="${c}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const home = (c) => ic(c, '<path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z"/>');
+    const fin = (c) => ic(c, '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M9.5 10h4M9.5 12.5h4"/>');
+    const vid = (c) => ic(c, '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M10 9.5l5 2.5-5 2.5z"/>');
+    const msg = (c) => ic(c, '<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>');
+    const my = (c) => ic(c, '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/>');
+    const tab = (label, route, svg, on) => `<div ${route ? `data-action="cp-open" data-route="${route}"` : ''} style="flex:1;text-align:center;cursor:${route ? 'pointer' : 'default'}"><div style="display:flex;justify-content:center">${svg(on ? '#1677ff' : '#9a9a9a')}</div><div style="font-size:10.5px;margin-top:2px;color:${on ? '#1677ff' : '#9a9a9a'}">${label}</div></div>`;
+    return `<div style="display:flex;align-items:center;padding:7px 0 9px;background:#fff;border-top:1px solid #eee;flex-shrink:0">${tab('首页', '', home, false)}${tab('理财', '', fin, false)}${tab('视频', '', vid, false)}${tab('消息', '', msg, false)}${tab('我的', 'cp-alipay', my, active === 'my')}</div>`;
+  }
+  function cpAttitudeRule(uname) {
+    return `\n【会不会牵扯到 ${uname}(很重要,别穿帮)】:先依据人设+世界书+当前剧情,判断此刻 ta 对 ${uname} 的【真实态度】和【关系到了哪一步】。
+- 只有当 ta 对 ${uname} 确实已经有好感/在意、且剧情真到了那一步 → 才可以让一点【暗戳戳的、没明说的在意】藏进这些痕迹(查 ${uname} 的喜好、犹豫要不要买的同款、备注里的潜台词…),但【绝不超前于当前关系阶段】。
+- 如果 ta 对 ${uname} 还没那个意思(不熟/无感/甚至讨厌)→【不要硬塞任何跟 ${uname} 有关的暧昧暗流】,就正常写 ta 自己的社交、秘密、日常喜好,${uname} 可以根本不出现。
+料必须从【真实关系】里自然长出来,绝不为了有看头硬编不存在的好感。`;
+  }
+  function cpBillIcon(s) {
+    s = String(s || '');
+    if (/转账|红包|发给|收款/.test(s)) return '💸';
+    if (/餐|吃|饭|外卖|奶茶|咖啡|食|烧烤|火锅/.test(s)) return '🍜';
+    if (/打车|出行|地铁|公交|加油|油费|车/.test(s)) return '🚕';
+    if (/药|医院|挂号|诊|院/.test(s)) return '💊';
+    if (/话费|流量|充值|电话/.test(s)) return '📱';
+    if (/淘宝|京东|购|买|商城|店|超市/.test(s)) return '🛍️';
+    if (/电|水|气|物业|房租|缴费/.test(s)) return '🏠';
+    if (/烟|酒/.test(s)) return '🚬';
+    if (/工资|收入|报酬|奖金|分成/.test(s)) return '🪙';
+    return '💰';
+  }
+  function renderCharPhoneHome(d) {
+    const cp = d.charPhone;
+    const bg = d.charPhoneBg || '';
+    const isUrl = bg && /^https?:\/\//i.test(bg);
+    const grad = (bg && !isUrl) ? bg : 'linear-gradient(160deg,#2b2540,#4a3a6b)';
+    const dark = d.charPhoneTextColor === 'dark';
+    const txt = dark ? '#222' : '#fff';
+    const shadow = dark ? 'none' : '0 1px 4px rgba(0,0,0,.4)';
+    const lblShadow = dark ? 'none' : '0 1px 3px rgba(0,0,0,.4)';
+    const ic = d.charPhoneIcons || {};
+    const tile = (route, key, emoji, label, count) => {
+      const url = ic[key];
+      const inner = url ? `${emoji}<img src="${esc(url)}" referrerpolicy="no-referrer" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:15px"/>` : emoji;
+      return `
+      <div data-action="cp-open" data-route="${route}" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
+        <div style="position:relative;width:58px;height:58px;border-radius:15px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:30px;overflow:hidden">${inner}</div>
+        <span style="color:${txt};font-size:12px;text-shadow:${lblShadow}">${label}</span>
+      </div>`;
+    };
+    const refreshBtn = `<div data-action="cp-refresh-all" title="刷新全部 app(较慢)" style="position:absolute;top:14px;right:16px;z-index:3;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="${dark ? '#444' : '#fff'}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><polyline points="20.5 3.5 20.5 8 16 8"/></svg></div>`;
+    return `
+      <div style="position:relative;flex:1;background:${grad};overflow:hidden;display:flex;flex-direction:column">
+        ${isUrl ? `<img src="${esc(bg)}" referrerpolicy="no-referrer" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0"/>` : ''}
+        ${refreshBtn}
+        <div style="position:relative;z-index:1;text-align:center;padding:54px 0 30px;color:${txt};text-shadow:${shadow}">
+          <div id="xhs-home-time" style="font-size:50px;font-weight:200;letter-spacing:1px">--:--</div>
+        </div>
+        <div style="position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,1fr);gap:16px 8px;padding:10px 18px">
+          ${tile('cp-wx', 'wx', '💬', '微信', cp ? cp.wx.length : 0)}
+          ${tile('cp-notes', 'notes', '📝', '备忘录', cp ? cp.notes.length : 0)}
+          ${tile('cp-safari', 'safari', '🧭', 'Safari', cp ? cp.safari.length : 0)}
+          ${tile('cp-music', 'music', '🎵', '网易云', 0)}
+          ${tile('cp-taobao', 'taobao', '🛒', '淘宝', 0)}
+          ${tile('cp-alipay', 'alipay', '💰', '支付宝', 0)}
+          ${tile('cp-doubao', 'doubao', '🫛', '豆包', 0)}
+          ${tile('cp-poop', 'poop', `<img src="${POOP_IMG}" style="width:84%;height:84%;object-fit:contain"/>`, '拉了吗', 0)}
+        </div>
+      </div>`;
+  }
+  function renderCharPhoneLock(d) {
+    const dark = d.charPhoneTextColor === 'dark';
+    const txt = dark ? '#222' : '#fff';
+    const shadow = dark ? 'none' : '0 2px 8px rgba(0,0,0,.45)';
+    const bg = d.charPhoneLockBg || d.charPhoneBg || '';
+    const isUrl = bg && /^https?:\/\//i.test(bg);
+    const grad = (bg && !isUrl) ? bg : 'linear-gradient(160deg,#2b2540,#4a3a6b)';
+    let date = '';
+    try { date = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }); } catch (e) {}
+    return `
+      <div data-action="cp-unlock" style="position:relative;flex:1;background:${grad};overflow:hidden;display:flex;flex-direction:column;cursor:pointer">
+        ${isUrl ? `<img src="${esc(bg)}" referrerpolicy="no-referrer" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0"/>` : ''}
+        <div style="position:relative;z-index:1;text-align:center;padding:62px 0 0;color:${txt};text-shadow:${shadow}">
+          <div style="font-size:15px;font-weight:500;opacity:.95">${esc(date)}</div>
+          <div id="xhs-home-time" style="font-size:68px;font-weight:200;letter-spacing:1px;margin-top:2px;line-height:1.05">--:--</div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="position:relative;z-index:1;text-align:center;padding-bottom:34px;color:${txt};text-shadow:${shadow}">
+          <div style="font-size:13px;opacity:.92">点击解锁</div>
+        </div>
+      </div>`;
+  }
+  function cpTopbar(title, backRoute, bg, refreshAction) {
+    const right = refreshAction ? `<button class="xhs-icon-btn" data-action="${refreshAction}" title="重新生成">↻</button>` : `<span style="width:32px"></span>`;
+    return `<div class="xhs-topbar"${bg ? ` style="background:${bg}"` : ''}><button class="xhs-icon-btn" data-action="cp-back" data-route="${backRoute}">‹</button><span class="xhs-topbar-title">${esc(title)}</span>${right}</div>`;
+  }
+  function renderCharPhoneWx(d) {
+    const cp = d.charPhone || { wx: [] };
+    const real = cpRealDm(d);
+    const rowStyle = 'display:flex;align-items:center;gap:11px;padding:12px 14px;background:#fff;border-bottom:1px solid #f0f0f0;cursor:pointer';
+    const timeEl = (t) => t ? `<div style="font-size:11px;color:#bbb;flex-shrink:0;align-self:flex-start;margin-top:2px">${esc(t)}</div>` : '';
+    const preview = (m) => m ? (m.kind === 'sticker' ? '[表情]' : (m.kind === 'image' ? '[图片]' : (m.kind === 'voice' ? '[语音]' : (m.text || '')))) : '';
+    const rows = [];
+    if (real && (real.messages || []).length) {
+      const last = [...real.messages].reverse().find(m => m.text || m.kind);
+      const rt = (d.useStoryTime && last && last.st) ? String(last.st) : '';
+      rows.push(`<div style="${rowStyle}" data-action="cp-open-chat" data-idx="real">${cpUserAvatar(d, 44)}<div style="flex:1;min-width:0"><div style="font-size:15px;color:#222">${esc(d.userName || '我')}</div><div style="font-size:12.5px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(preview(last).slice(0, 26))}</div></div>${timeEl(rt)}</div>`);
+    }
+    (cp.wx || []).forEach((c, i) => {
+      const last = c.msgs[c.msgs.length - 1];
+      rows.push(`<div style="${rowStyle}" data-action="cp-open-chat" data-idx="${i}">${cpNpcAvatar(d, c.name, 44)}<div style="flex:1;min-width:0"><div style="font-size:15px;color:#222">${esc(c.name)}</div><div style="font-size:12.5px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((last && last.text || '').slice(0, 26))}</div></div>${timeEl(c.time)}</div>`);
+    });
+    return cpTopbar('微信', 'cp-home', '', 'cp-refresh') + `<div class="xhs-scroll" style="background:#ededed">${rows.join('') || '<div class="xhs-empty">没刷到聊天,回上一页点 🔄</div>'}</div>`;
+  }
+  function renderCharPhoneWxChat(d) {
+    const cp = d.charPhone || { wx: [] };
+    const idx = d.routeContext.cpChat;
+    const taAv = cpCharAvatar(d, 38);
+    const cpBubbleRow = (m, mine, av) => {
+      let body;
+      if (m.kind === 'sticker' && m.url) body = `<img src="${esc(m.url)}" style="width:92px;height:92px;object-fit:contain"/>`;
+      else if (m.kind === 'image') body = `<div style="padding:8px 11px;border-radius:9px;background:#fff;color:#888;font-size:13px">🖼 ${esc(m.text || '图片')}</div>`;
+      else if (m.kind === 'voice') body = `<div style="padding:8px 14px;border-radius:9px;background:${mine ? '#95ec69' : '#fff'};font-size:14px;color:#1a1a1a">▶ ${m.sec || 1}″${m.text ? ' ' + esc(m.text) : ''}</div>`;
+      else { if (!m.text) return ''; body = `<div style="padding:8px 11px;border-radius:9px;font-size:14px;line-height:1.45;background:${mine ? '#95ec69' : '#fff'};color:#1a1a1a;word-break:break-word">${esc(m.text)}</div>`; }
+      return `<div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin:9px 0"><div style="display:flex;gap:8px;align-items:flex-start;flex-direction:${mine ? 'row-reverse' : 'row'};max-width:82%">${av}${body}</div></div>`;
+    };
+    let title = '', rows = [];
+    if (idx === 'real') {
+      const real = cpRealDm(d);
+      const uAv = cpUserAvatar(d, 38);
+      title = (d.userName || '我');
+      const msgs = (real ? real.messages : []).filter(m => m.role !== 'heart' && (m.text || m.kind === 'sticker' || m.kind === 'image' || m.kind === 'voice'));
+      rows = msgs.map((m, i) => { const mine = m.role === 'npc'; return storyTimeSep(d, m, msgs[i - 1]) + cpBubbleRow(m, mine, mine ? taAv : uAv); });
+    } else {
+      const c = cp.wx[Number(idx)];
+      if (!c) return renderCharPhoneWx(d);
+      const cAv = cpNpcAvatar(d, c.name, 38);
+      title = c.name;
+      rows = (c.time ? [`<div class="xhs-grp-time">${esc(c.time)}</div>`] : []).concat(c.msgs.map(m => { const mine = m.from === 'ta'; return cpBubbleRow({ text: m.text }, mine, mine ? taAv : cAv); }));
+    }
+    return cpTopbar(title, 'cp-wx') + `<div class="xhs-scroll" style="background:#ededed;padding:10px 12px">${rows.join('') || '<div class="xhs-empty">没有消息</div>'}</div>`;
+  }
+  function renderCharPhoneNotes(d) {
+    const cp = d.charPhone || { notes: [] };
+    const rows = (cp.notes || []).map((n, i) => {
+      const prev = String(n.body || '').replace(/\n/g, ' ').trim().slice(0, 32);
+      return `<div data-action="cp-note-open" data-idx="${i}" style="padding:11px 16px;border-bottom:1px solid #efece4;cursor:pointer;background:#fff">
+        <div style="font-size:15px;font-weight:600;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n.title || '新建备忘录')}</div>
+        <div style="font-size:12.5px;color:#a3a097;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(prev || '没有其他文本')}</div>
+      </div>`;
+    }).join('');
+    return `
+      <div class="xhs-topbar" style="background:#fcfbf7"><button class="xhs-icon-btn" data-action="cp-back" data-route="cp-home" style="color:#e0a91c">‹</button><span class="xhs-topbar-title"></span><button class="xhs-icon-btn" data-action="cp-refresh" title="重新生成" style="color:#e0a91c">↻</button></div>
+      <div class="xhs-scroll" style="background:#fcfbf7">
+        <div style="font-size:22px;font-weight:800;color:#111;padding:4px 16px 12px">备忘录</div>
+        ${rows || '<div class="xhs-empty">空空如也,回上一页点 🔄</div>'}
+        <div style="height:40px"></div>
+      </div>`;
+  }
+  function renderCharPhoneNote(d) {
+    const cp = d.charPhone || { notes: [] };
+    const n = (cp.notes || [])[Number(d.routeContext.cpNote)];
+    if (!n) return renderCharPhoneNotes(d);
+    const dt = new Date(cp.genAt || Date.now()).toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const y = '#e0a91c';
+    const svg = (inner) => `<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="${y}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+    const icChecklist = svg('<circle cx="5" cy="7" r="2.2"/><path d="M3.8 7l.9.9 1.5-1.7"/><line x1="9.5" y1="7" x2="20" y2="7"/><circle cx="5" cy="15" r="2.2"/><line x1="9.5" y1="15" x2="20" y2="15"/>');
+    const icClip = svg('<path d="M20.5 11l-8.6 8.6a3.8 3.8 0 0 1-5.4-5.4l8.7-8.7a2.5 2.5 0 0 1 3.6 3.6l-8.1 8.1a1.25 1.25 0 0 1-1.8-1.8l7.4-7.4"/>');
+    const icMarkup = svg('<circle cx="12" cy="12" r="9"/><path d="M15.4 8.6l-4.8 4.8-1.1 2.5 2.5-1.1 4.8-4.8a1.2 1.2 0 0 0-1.4-1.4z"/>');
+    const icCompose = svg('<path d="M18.5 13v5.5A1.5 1.5 0 0 1 17 20H5.5A1.5 1.5 0 0 1 4 18.5V7A1.5 1.5 0 0 1 5.5 5.5H11"/><path d="M16.5 4l3.5 3.5-7.3 7.3-4 .9.9-4z"/>');
+    const tools = `<div style="display:flex;align-items:center;gap:30px;padding:11px 24px;border-top:1px solid #eee;background:#fcfbf7">${icChecklist}${icClip}${icMarkup}<span style="margin-left:auto">${icCompose}</span></div>`;
+    return `
+      <div class="xhs-topbar" style="background:#fcfbf7"><button class="xhs-icon-btn" data-action="cp-back" data-route="cp-notes" style="color:#e0a91c">‹</button><span class="xhs-topbar-title"></span><span style="color:#e0a91c;font-size:15px;letter-spacing:2px">⤴&nbsp;⋯</span></div>
+      <div class="xhs-scroll" style="background:#fff;padding:16px 20px">
+        <div style="text-align:center;font-size:11px;color:#b4b1a8;margin-bottom:14px">${dt}</div>
+        <div style="font-size:17px;font-weight:700;color:#111;margin-bottom:9px">${esc(n.title || '')}</div>
+        <div style="font-size:13.5px;color:#333;line-height:1.75;white-space:pre-wrap">${esc(n.body || '')}</div>
+        <div style="height:24px"></div>
+      </div>
+      ${tools}`;
+  }
+  function renderCharPhoneSafari(d) {
+    const cp = d.charPhone || { safari: [] };
+    const open = d.routeContext.cpSafari;
+    const googleLogo = `<div style="text-align:center;padding:24px 0 16px"><span style="font-size:34px;font-weight:600;letter-spacing:-1px;font-family:Arial,sans-serif"><span style="color:#4285F4">G</span><span style="color:#EA4335">o</span><span style="color:#FBBC05">o</span><span style="color:#4285F4">g</span><span style="color:#34A853">l</span><span style="color:#EA4335">e</span></span></div>`;
+    const searchBar = `<div style="margin:0 14px 16px;background:#fff;border-radius:22px;padding:11px 18px;box-shadow:0 1px 6px rgba(0,0,0,.08)"><span style="color:#bbb;font-size:14px">搜索或输入网址</span></div>`;
+    const histHeader = `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 18px 6px"><span style="color:#888;font-size:13px">搜索历史</span><span data-action="clear-cp-search" style="color:#888;font-size:13px;cursor:pointer">清除记录</span></div>`;
+    const clk = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#9a9a9e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M3.6 12a8.4 8.4 0 1 0 2.7-6.2"/><polyline points="3 4.4 3 8.1 6.7 8.1"/><polyline points="12 7.6 12 12 15 13.8"/></svg>`;
+    const rows = (cp.safari || []).map((s, i) => `
+      <div data-action="cp-safari-toggle" data-idx="${i}" style="padding:13px 18px;border-top:1px solid #eaeaea;cursor:pointer;background:#fff">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          ${clk}
+          <div style="flex:1;min-width:0;font-size:15px;color:#222;line-height:1.4">${esc(s.query)}</div>
+          ${s.time ? `<span style="color:#bbb;font-size:12px;flex-shrink:0;margin-top:2px">${esc(s.time)}</span>` : ''}
+        </div>
+        ${String(open) === String(i) ? `<div style="margin:8px 0 0 32px;font-size:13px;color:#1e3a8a;line-height:1.65">${esc(s.inner || '(没记下当时在想什么)')}</div>` : ''}
+      </div>`).join('');
+    return `${cpTopbar('', 'cp-home', '#f2f2f7', 'cp-refresh')}<div class="xhs-scroll" style="background:#f2f2f7">${googleLogo}${searchBar}${histHeader}${rows || '<div class="xhs-empty">没有搜索记录,回上一页点 🔄</div>'}<div style="height:30px"></div></div>`;
+  }
+  function renderCharPhoneMusic(d) {
+    const m = d.charPhoneMusic;
+    const topbar = `<div class="xhs-topbar"><button class="xhs-icon-btn" data-action="cp-back" data-route="cp-home">‹</button><span class="xhs-topbar-title">网易云音乐</span><button class="xhs-icon-btn" data-action="cp-music-refresh" title="重新生成">↻</button></div>`;
+    const tab = d.routeContext.musicTab || 'rec';
+    const mtab = (label, key, n) => `<div data-action="cp-music-tab" data-cat="${key}" style="flex:1;text-align:center;padding:11px 0;cursor:pointer;font-size:14px;color:${tab === key ? '#ec4141' : '#666'};font-weight:${tab === key ? '700' : '400'};border-top:2px solid ${tab === key ? '#ec4141' : 'transparent'}">${label}${n ? ` ${n}` : ''}</div>`;
+    const cmtCount = m ? (m.songs || []).filter(s => s.comment).length : 0;
+    const tabbar = `<div style="display:flex;background:#fff;border-top:1px solid #eee;flex-shrink:0">${mtab('记录', 'rec')}${mtab('评论', 'comment', cmtCount)}</div>`;
+    if (!m) return topbar + `<div class="xhs-scroll" style="background:#fafafa"><div class="xhs-empty">生成中…(没动静就点右上角 ↻)</div></div>` + tabbar;
+    const cname = charDisplayName(d);
+    const fmtLike = (n) => n >= 10000 ? (n / 10000).toFixed(1) + '万' : String(n);
+    const dft = new Date(m.genAt || Date.now()).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    let body;
+    if (tab === 'comment') {
+      const cards = (m.songs || []).filter(s => s.comment).map(s => `
+        <div style="padding:14px 16px;border-bottom:1px solid #f2f2f2;display:flex;gap:10px;background:#fff">
+          ${cpCharAvatar(d, 34)}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:#9aa3ad">${esc(cname)}</div>
+            <div style="font-size:14.5px;color:#222;line-height:1.6;margin-top:5px">${esc(s.comment)}</div>
+            <div style="margin-top:8px;background:#f6f6f6;border-radius:6px;padding:7px 10px;font-size:12px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🎵 ${esc(s.title)} - ${esc(s.artist)}</div>
+            <div style="font-size:11px;color:#c2c2c2;margin-top:7px">${esc(s.date || dft)}</div>
+          </div>
+          <div style="text-align:center;color:#b6b6b6;flex-shrink:0;font-size:11px"><div style="font-size:15px;line-height:1">♡</div>${fmtLike(s.likes || 0)}</div>
+        </div>`).join('');
+      body = `<div style="font-size:14px;font-weight:700;color:#333;padding:12px 16px 6px">ta 的评论</div>${cards || '<div class="xhs-empty">还没有评论</div>'}`;
+    } else {
+      const rows = (m.songs || []).map((s, i) => `
+        <div style="padding:11px 16px;border-bottom:1px solid #f2f2f2;display:flex;align-items:center;gap:12px">
+          <span style="color:#ec4141;font-size:15px;font-weight:600;width:20px;flex-shrink:0;text-align:center">${i + 1}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15px;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.title)}</div>
+            <div style="font-size:12px;color:#aaa;margin-top:2px">${esc(s.artist)}${s.comment ? ' · 写过评论' : ''}</div>
+          </div>
+          <span style="font-size:11.5px;color:#bbb;flex-shrink:0">循环 ${s.loops || 0} 次</span>
+        </div>`).join('');
+      body = `<div style="font-size:14px;font-weight:700;color:#333;padding:12px 16px 6px">最近播放</div>${rows || '<div class="xhs-empty">没有播放记录</div>'}`;
+    }
+    return topbar + `<div class="xhs-scroll" style="background:#fff">${body}<div style="height:20px"></div></div>` + tabbar;
+  }
+  function renderCharPhoneTaobao(d) {
+    const t = d.charPhoneTaobao;
+    const back = `<div data-action="cp-back" data-route="cp-home" style="position:absolute;top:10px;left:8px;z-index:4;width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;cursor:pointer">‹</div>`;
+    const refresh = `<div data-action="cp-tb-refresh" title="重新生成" style="position:absolute;top:13px;right:14px;z-index:4;cursor:pointer"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><polyline points="20.5 3.5 20.5 8 16 8"/></svg></div>`;
+    if (!t) return `<div class="xhs-scroll" style="background:#f4f4f4;position:relative">${back}${refresh}<div class="xhs-empty">生成中…(没动静就点右上角 ↻)</div></div>` + cpTbTabs('my');
+    const cname = charDisplayName(d);
+    const oc = (st) => (t.orders || []).filter(o => o.status === st).length;
+    const orderItem = (kind, label, st) => { const n = oc(st); return `<div data-action="cp-tb-orders" data-cat="${st}" style="flex:1;text-align:center;position:relative;cursor:pointer"><div style="display:flex;justify-content:center">${tbOrderIcon(kind)}</div><div style="font-size:11px;color:#444;margin-top:5px">${label}</div>${n ? `<span style="position:absolute;top:-3px;left:calc(50% + 6px);background:#ff5000;color:#fff;font-size:9px;min-width:15px;height:15px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;padding:0 3px">${n}</span>` : ''}</div>`; };
+    return `<div class="xhs-scroll" style="background:#f4f4f4">
+      <div style="position:relative;background:linear-gradient(160deg,#ffb07a,#ff7a45);padding:46px 16px 16px">${back}${refresh}
+        <div style="display:flex;align-items:center;gap:12px">${cpCharAvatar(d, 50)}<div style="flex:1;min-width:0;color:#fff"><div style="font-size:18px;font-weight:700">${esc(cname)}</div>${t.vip ? `<span style="display:inline-block;margin-top:4px;background:rgba(0,0,0,.22);color:#ffe7c2;font-size:11px;padding:2px 9px;border-radius:9px">${esc(t.vip)}</span>` : ''}</div></div>
+      </div>
+      <div style="margin:-10px 12px 0;background:#fff;border-radius:12px;padding:11px 14px;font-size:13px;color:#333">累计省钱 <b style="color:#ff5000">${cpYuan(t.saved)}</b> 元</div>
+      <div style="margin:10px 12px 0;background:#fff;border-radius:12px;padding:14px 8px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:0 6px 14px"><span style="font-size:15px;font-weight:700;color:#222">我的订单</span><span data-action="cp-tb-orders" style="font-size:12px;color:#999;cursor:pointer">查看全部 ›</span></div>
+        <div style="display:flex">${orderItem('pay', '待付款', 'topay')}${orderItem('ship', '待发货', 'toship')}${orderItem('recv', '待收货', 'torecv')}${orderItem('rate', '已评价', 'reviewed')}${orderItem('refund', '退款/售后', 'refund')}</div>
+      </div>
+      <div style="height:24px"></div>
+    </div>` + cpTbTabs('my');
+  }
+  function renderCharPhoneTbCart(d) {
+    const t = d.charPhoneTaobao || { cart: [] };
+    const cart = t.cart || [];
+    let html = '', lastKey = null, total = 0;
+    cart.forEach(it => {
+      total += (it.price || 0) * (it.qty || 1);
+      const key = it.mall + '|' + it.shop;
+      if (key !== lastKey) { lastKey = key; html += `<div style="height:8px;background:#f4f4f4"></div><div style="display:flex;align-items:center;gap:7px;padding:12px 14px 4px;background:#fff"><span style="width:18px;height:18px;border:1.5px solid #ddd;border-radius:50%;flex-shrink:0"></span>${cpMallTag(it.mall)}<span style="font-size:14px;font-weight:600;color:#222">${esc(it.shop || '店铺')} ›</span></div>`; }
+      const tags = ['官方立减', '退货宝', '7天无理由'].map(tg => `<span style="font-size:10.5px;color:#ff5000;border:1px solid #ffd6c2;border-radius:3px;padding:1px 4px">${tg}</span>`).join('');
+      html += `<div style="display:flex;gap:10px;padding:8px 14px 12px;background:#fff"><span style="width:18px;height:18px;border:1.5px solid #ddd;border-radius:50%;flex-shrink:0;margin-top:30px"></span><div style="width:80px;height:80px;border-radius:8px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0">🛍️</div><div style="flex:1;min-width:0"><div style="font-size:14px;color:#222;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(it.title)}</div>${it.spec ? `<div style="display:inline-block;font-size:11px;color:#888;background:#f3f3f3;border-radius:10px;padding:2px 8px;margin-top:5px">${esc(it.spec)} ›</div>` : ''}<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${tags}</div><div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:7px"><div><span style="font-size:11px;color:#888">店铺优惠后 </span><span style="color:#ff5000;font-size:17px;font-weight:700">¥${cpYuan(it.price)}</span>${it.origPrice > it.price ? `<span style="font-size:12px;color:#bbb;text-decoration:line-through;margin-left:4px">¥${cpYuan(it.origPrice)}</span>` : ''}</div><span style="color:#999;font-size:13px">×${it.qty || 1}</span></div></div></div>`;
+    });
+    const bar = cart.length ? `<div style="display:flex;align-items:center;padding:10px 14px;background:#fff;border-top:1px solid #eee;flex-shrink:0"><span style="width:18px;height:18px;border:1.5px solid #ddd;border-radius:50%;margin-right:6px"></span><span style="font-size:13px;color:#333">全选</span><div style="margin-left:auto;font-size:13px;color:#333;margin-right:10px">合计 <b style="color:#ff5000;font-size:16px">¥${cpYuan(total)}</b></div><div style="background:#ff5000;color:#fff;border-radius:18px;padding:8px 22px;font-size:14px">结算(${cart.length})</div></div>` : '';
+    return cpTopbar(`购物车(${cart.length})`, 'cp-taobao') + `<div class="xhs-scroll" style="background:#f4f4f4">${html || '<div class="xhs-empty">购物车是空的</div>'}<div style="height:8px;background:#f4f4f4"></div></div>${bar}${cpTbTabs('cart')}`;
+  }
+  function renderCharPhoneTbOrders(d) {
+    const t = d.charPhoneTaobao || { orders: [] };
+    const st = d.routeContext.tbStatus || '';
+    const labels = { topay: '待付款', toship: '待发货', torecv: '待收货', reviewed: '已评价', refund: '退款/售后' };
+    const stText = { topay: '等待付款', toship: '等待发货', torecv: '卖家已发货', reviewed: '交易成功', refund: '退款/售后中' };
+    const list = st ? (t.orders || []).filter(o => o.status === st) : (t.orders || []);
+    const rows = list.map(o => {
+      const extra = (o.status === 'reviewed' && o.review) ? `<div style="margin-top:9px;background:#faf7f2;border-radius:8px;padding:9px 11px;font-size:13px;color:#555;line-height:1.55"><span style="color:#ff8800">★★★★★</span> ${esc(o.review)}</div>`
+        : ((o.status === 'refund' && o.complaint) ? `<div style="margin-top:9px;background:#fff4f4;border-radius:8px;padding:9px 11px;font-size:13px;color:#c0392b;line-height:1.55">退货原因:${esc(o.complaint)}</div>` : '');
+      return `<div style="background:#fff;padding:12px 14px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px"><span style="font-size:13px;color:#333">${cpMallTag(o.mall)} ${esc(o.shop || '店铺')}</span><span style="font-size:12px;color:${o.status === 'reviewed' ? '#999' : '#ff5000'}">${stText[o.status] || ''}</span></div><div style="display:flex;gap:10px"><div style="width:60px;height:60px;border-radius:8px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🛍️</div><div style="flex:1;min-width:0"><div style="font-size:14px;color:#222;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(o.title)}</div>${o.spec ? `<div style="font-size:11px;color:#999;margin-top:4px">${esc(o.spec)}</div>` : ''}</div><div style="text-align:right;flex-shrink:0"><div style="color:#222;font-size:14px;font-weight:600">¥${cpYuan(o.price)}</div>${o.date ? `<div style="font-size:11px;color:#bbb;margin-top:4px">${esc(o.date)}</div>` : ''}</div></div>${extra}</div>`;
+    }).join('');
+    return cpTopbar(st ? labels[st] : '我的订单', 'cp-taobao') + `<div class="xhs-scroll" style="background:#f4f4f4"><div style="height:8px"></div>${rows || `<div class="xhs-empty">没有${st ? labels[st] : ''}订单</div>`}</div>`;
+  }
+  function renderCharPhoneAlipay(d) {
+    const a = d.charPhoneAlipay;
+    const back = `<div data-action="cp-back" data-route="cp-home" style="position:absolute;top:10px;left:8px;z-index:4;width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:#33526e;font-size:26px;cursor:pointer">‹</div>`;
+    const refresh = `<div data-action="cp-ali-refresh" title="重新生成" style="position:absolute;top:13px;right:14px;z-index:4;cursor:pointer"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#33526e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><polyline points="20.5 3.5 20.5 8 16 8"/></svg></div>`;
+    if (!a) return `<div class="xhs-scroll" style="background:#eef3fa;position:relative">${back}${refresh}<div class="xhs-empty">生成中…(没动静就点右上角 ↻)</div></div>` + cpAliTabs('my');
+    const cname = charDisplayName(d);
+    const sep = `<div style="height:1px;background:#f3f3f3;margin-left:54px"></div>`;
+    const row = (icon, label, badge, right, route, dot) => `<div ${route ? `data-action="cp-open" data-route="${route}"` : ''} style="display:flex;align-items:center;gap:11px;padding:11px 14px;cursor:${route ? 'pointer' : 'default'}">${aliIcon(icon)}<span style="font-size:14px;color:#1a1a1a;font-weight:500;white-space:nowrap">${label}</span>${badge ? `<span style="background:#eaf1ff;color:#2f7bff;font-size:10px;padding:1px 6px;border-radius:6px;white-space:nowrap">${badge}</span>` : ''}<span style="flex:1"></span><span style="font-size:12px;color:#9aa6b2;margin-right:5px;white-space:nowrap">${right || ''}</span>${dot ? '<span style="width:7px;height:7px;border-radius:50%;background:#ff3b30;margin-right:5px"></span>' : ''}<span style="color:#cfd6de;font-size:13px">›</span></div>`;
+    const hb = a.huabei || {}; const owed = hb.owed || 0;
+    return `<div class="xhs-scroll" style="background:#eef3fa">
+      <div style="position:relative;background:linear-gradient(180deg,#cfe0f5,#eef3fa);padding:42px 14px 12px">${back}${refresh}
+        <div style="display:flex;align-items:center;gap:11px"><div style="width:46px;height:46px;border-radius:11px;overflow:hidden;flex-shrink:0">${cpCharAvatar(d, 46)}</div><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:700;color:#1a2b3c">${esc(cname)}</div><div style="margin-top:5px"><span style="background:rgba(22,119,255,.1);color:#1677ff;font-size:10.5px;padding:2px 8px;border-radius:8px">📇 证件 ›</span></div></div><span style="color:#9bb">›</span></div>
+      </div>
+      <div style="margin:6px 12px 0;background:#fff;border-radius:14px">${row('vip', '支付宝会员', '大众会员', '', '')}${sep}${row('shop', '商家服务', '', '', '')}</div>
+      <div style="margin:10px 12px 0;background:#fff;border-radius:14px">${row('bill', '账单', '', '', 'cp-ali-bills')}</div>
+      <div style="margin:10px 12px 0;background:#fff;border-radius:14px">${row('asset', '总资产', '', '查看账户余额', 'cp-ali-assets')}${sep}${row('huabei', '花呗', '', owed > 0 ? '待还 ¥' + cpYuan(owed) : '¥0', 'cp-ali-huabei', owed > 0)}</div>
+      <div style="height:20px"></div>
+    </div>` + cpAliTabs('my');
+  }
+  function renderCharPhoneAliAssets(d) {
+    const a = d.charPhoneAlipay || { balance: 0, yuebao: 0, banks: [] };
+    const total = (a.balance || 0) + (a.yuebao || 0) + (a.banks || []).reduce((s, b) => s + (b.amount || 0), 0);
+    const line = (label, val) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-top:1px solid #f3f3f3"><span style="font-size:13.5px;color:#333">${label}</span><span style="font-size:14.5px;color:#222;font-weight:600">¥${cpYuan(val)}</span></div>`;
+    const banks = (a.banks || []).map(b => `<div style="display:flex;align-items:center;gap:11px;padding:14px 16px;border-top:1px solid #f3f3f3">${aliIcon('balance')}<span style="flex:1;min-width:0;font-size:13.5px;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.name)}</span><span style="font-size:14.5px;color:#222;font-weight:600;flex-shrink:0">¥${cpYuan(b.amount)}</span></div>`).join('');
+    return cpTopbar('总资产', 'cp-alipay') + `<div class="xhs-scroll" style="background:#f4f4f4">
+      <div style="background:linear-gradient(160deg,#3d8bff,#1677ff);padding:18px 16px 22px;color:#fff"><div style="font-size:13px;opacity:.9">总资产(元)</div><div style="font-size:29px;font-weight:700;margin-top:4px">${cpYuan(total)}</div></div>
+      <div style="margin:-14px 12px 0;background:#fff;border-radius:12px;overflow:hidden"><div style="padding:11px 16px 0;font-size:13px;color:#999">我的账户</div>${line('余额', a.balance)}${line('余额宝', a.yuebao)}</div>
+      ${(a.banks || []).length ? `<div style="margin:10px 12px 0;background:#fff;border-radius:12px;overflow:hidden"><div style="padding:11px 16px 4px;font-size:13px;color:#999">银行卡</div>${banks}</div>` : ''}
+      <div style="height:24px"></div>
+    </div>`;
+  }
+  function renderCharPhoneAliHuabei(d) {
+    const a = d.charPhoneAlipay || {};
+    const h = a.huabei || { owed: 0, repaid: 0, limit: 0, note: '' };
+    const line = (label, val) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-top:1px solid #f3f3f3"><span style="font-size:13.5px;color:#333">${label}</span><span style="font-size:14.5px;color:#222;font-weight:600">¥${cpYuan(val)}</span></div>`;
+    return cpTopbar('花呗', 'cp-alipay') + `<div class="xhs-scroll" style="background:#f4f4f4">
+      <div style="background:linear-gradient(160deg,#4d9bff,#1f8fff);padding:18px 16px 22px;color:#fff"><div style="font-size:13px;opacity:.9">待还(元)</div><div style="font-size:29px;font-weight:700;margin-top:4px">${cpYuan(h.owed)}</div></div>
+      <div style="margin:-14px 12px 0;background:#fff;border-radius:12px;overflow:hidden"><div style="padding:11px 16px 0;font-size:13px;color:#999">花呗</div>${line('本期已还', h.repaid)}${line('可用额度', h.limit)}</div>
+      <div style="height:24px"></div>
+    </div>`;
+  }
+  function renderCharPhoneAliBills(d) {
+    const a = d.charPhoneAlipay || { bills: [] };
+    const bills = a.bills || [];
+    const cat = d.routeContext.aliCat || '全部';
+    const seen = [], catList = ['全部'];
+    bills.forEach(b => { if (b.cat && seen.indexOf(b.cat) < 0) { seen.push(b.cat); catList.push(b.cat); } });
+    const out = bills.filter(b => b.type === 'out').reduce((s, b) => s + (b.amount || 0), 0);
+    const inc = bills.filter(b => b.type === 'in').reduce((s, b) => s + (b.amount || 0), 0);
+    const list = cat === '全部' ? bills : bills.filter(b => b.cat === cat);
+    const tabs = catList.map(c => `<span data-action="cp-ali-cat" data-cat="${esc(c)}" style="flex-shrink:0;padding:5px 13px;border-radius:14px;font-size:12.5px;cursor:pointer;${c === cat ? 'background:#1677ff;color:#fff' : 'background:#f0f0f0;color:#555'}">${esc(c)}</span>`).join('');
+    const rows = list.map(b => {
+      const o = b.type !== 'in';
+      const sub = [b.note, b.time].filter(Boolean).join(' · ');
+      return `<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid #f2f2f2;background:#fff"><div style="width:33px;height:33px;border-radius:50%;background:#eef3ff;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${cpBillIcon(b.title + b.note + b.cat)}</div><div style="flex:1;min-width:0"><div style="font-size:13.5px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.title)}</div>${sub ? `<div style="font-size:11.5px;color:#aaa;margin-top:2px">${esc(sub)}</div>` : ''}</div><div style="font-size:15px;font-weight:600;flex-shrink:0;color:${o ? '#222' : '#19be6b'}">${o ? '-' : '+'}${cpYuan(b.amount)}</div></div>`;
+    }).join('');
+    return cpTopbar('账单', 'cp-alipay') + `<div class="xhs-scroll" style="background:#f4f4f4">
+      <div style="background:#fff;padding:15px 16px;display:flex;justify-content:space-around;text-align:center"><div><div style="font-size:18px;font-weight:700;color:#222">${cpYuan(out)}</div><div style="font-size:12px;color:#999;margin-top:3px">本月支出</div></div><div style="width:1px;background:#eee"></div><div><div style="font-size:18px;font-weight:700;color:#19be6b">${cpYuan(inc)}</div><div style="font-size:12px;color:#999;margin-top:3px">本月收入</div></div></div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding:10px 12px;background:#fff;border-top:1px solid #f4f4f4">${tabs}</div>
+      ${rows || '<div class="xhs-empty">没有账单</div>'}
+      <div style="height:20px"></div>
+    </div>`;
+  }
+
+  function renderCharPhoneDoubao(d) {
+    const db = d.charPhoneDoubao;
+    const ico = (p) => `<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="#666" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const phone = ico('<path d="M6.5 3.5h3l1.5 4-2 1.5a11 11 0 0 0 5 5l1.5-2 4 1.5v3a1.5 1.5 0 0 1-1.6 1.5A16 16 0 0 1 5 6.1 1.5 1.5 0 0 1 6.5 3.5z"/>');
+    const refr = `<div data-action="cp-doubao-refresh" title="重新生成" style="width:30px;display:flex;justify-content:center;cursor:pointer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#666" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><polyline points="20.5 3.5 20.5 8 16 8"/></svg></div>`;
+    const top = `<div style="display:flex;align-items:center;padding:8px 8px;background:#fff;border-bottom:1px solid #f0f0f0;flex-shrink:0"><div data-action="cp-back" data-route="cp-home" style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:#333;font-size:25px;cursor:pointer">‹</div><div style="flex:1;text-align:center"><div style="font-size:16px;font-weight:600;color:#1a1a1a">豆包 ›</div><div style="font-size:10.5px;color:#bbb;margin-top:1px">内容由 AI 生成</div></div><div style="width:30px;display:flex;justify-content:center">${phone}</div>${refr}</div>`;
+    const inputBar = `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border-top:1px solid #f0f0f0;flex-shrink:0"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="#444" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.5" width="18" height="13" rx="2.5"/><circle cx="12" cy="13" r="3.2"/><path d="M8 6.5l1.2-2h5.6l1.2 2"/></svg><div style="flex:1;background:#f3f4f6;border-radius:18px;padding:9px 14px;font-size:13px;color:#aaa">发消息或按住说话…</div><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#444" stroke-width="1.6" stroke-linecap="round"><path d="M9 5v14M15 5v14M5 9v6M19 9v6M12 3v18"/></svg><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#444" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>`;
+    if (!db || !(db.msgs || []).length) return top + `<div class="xhs-scroll" style="background:#f4f5f7"><div class="xhs-empty">生成中…(没动静就点右上角 ↻)</div></div>` + inputBar;
+    const bubbles = db.msgs.map(m => {
+      if (m.from === 'ai') return `<div style="display:flex;margin:11px 0;padding-right:36px"><div style="background:#fff;color:#1a1a1a;border-radius:3px 16px 16px 16px;padding:11px 13px;font-size:14.5px;line-height:1.6;white-space:pre-wrap;box-shadow:0 1px 2px rgba(0,0,0,.04)">${esc(m.text)}</div></div>`;
+      return `<div style="display:flex;justify-content:flex-end;margin:11px 0;padding-left:36px"><div style="background:#3b8bff;color:#fff;border-radius:16px 3px 16px 16px;padding:11px 13px;font-size:14.5px;line-height:1.6;white-space:pre-wrap">${esc(m.text)}</div></div>`;
+    }).join('');
+    return top + `<div class="xhs-scroll" style="background:#f4f5f7;padding:8px 14px 14px">${bubbles}</div>` + inputBar;
+  }
+
+  const POOP_IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAYAAACLz2ctAAAaWUlEQVR42u3deXxV5ZkH8N/znnPuktybhCQkZAFZAyZFQ0CtCCZxUBbRovbGpXWpWqfW0qHtVJx+qjd0ZrRT2+pU0Wo3O2pbE7dBVIaP1USrgOyQhUW2LEDIntz9nPM+88e9idEqiqMMCe/388knIZDLzXue87zv+5z3vAdQFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFOX/CTNTVVWVVlpaqpeWlup+v19nZlIto3yh/H6/KC0t1Y/396qVTpw6cz9FxiMiAODEn1MeeOCBL+/fv7/YMDSXy5UUvP322/8wbty4Lr/fL1asWCFVqymfW9YDACEEtr377ox/Wrr0noULFxwomVHMUwsKeMqUAp46bRovWryo5emnn56X+BldtZzyuQUfM6ff8s1v/qm8vJwLCgp4dFY2e1NS7MyMDHNMTo6Zl5cXy87O5vnz5/dv2bKlEACqqqo01YLKZzYQQOvXry/86le/untKwVROS0uTmaPSzLOLzjSvr1jCK396Dz//xEN8zeXzOcPrscaOHcsLFy3c88ILL4xVY8JPT52pHxF8FRUV9r59+8bdd999f3377XcmBvu6rAm5mdo1Vyygf7rtOuu8GZP1/MwkpLkFZhQXIRSOioY9++zO7u5MacvS559/ctWrr/41MnPmTG3ixInU0NCgGlYF4Ce77bbbjLvuust69tlnz7j//p/VrFu3fnwsFLCnTszRf/idGzC7eAqZoR49Fg7AjsUQi4ah6zamTivAtu0N4lDzYTM5OTnf4fDs/clPfrJx8+bNsqGhgQHA5/NpKhDVLPhjx3srVqwAAMnM6Tdef+NDtW+9dV0o0GWdNWWC/s/fuR6pbsCOxkBCi0+HEyxYMJwe7Nzdgv9+9Q07J28cXbbkyrv27D+wo7ej4+r8CRPf/va3l/6eiOI/5oNW5atCRUWFHJhZqwA8jUssFRUVorq62jYMA8uXL1++ZfPm77kc7uzGxjppICz+bfkyZI/SEYn0QRMu8EfEDENCd7oRsxlCaMjIzo/87MHfuDZtrUfKqNHIzs3fWlpW+qtly5Y9TUTmwM/5fD6tsLCQT+fSDZ3ugQcALfv2FfxL5T2Pbty89aIjLa2YMilfjs9PFxfNPgezzpyCcLAHQhdgFokG4w81ooRkhtA0sJRwutxYt6mef/v0Kru1o1fobo/IzRmLyVMm1mdkZGyae/7cZ75249deJ6Jo4iUExwuOrAJwhP++Pp9vMPCYOfW++376o7ffeecb27ZsGx0MBqwzxqRoX1l4Ac29YBZcugY7GoH2aZuJ4y3KLNnhTKIDR3rx5xdfxda6PbK3P8iupBTN6/UgLTUFE8ZPqi+ecfbOGdOn/+LSJVdsSgS18Pv9OJ0y4mkTgAOz24HAu/POO+/Yv3//0oaGXWO6uzrh1MkuKhin3eS7BBPHZiEUCkAyIEjDZ8lLzBIOpxNRS2DfoVas31yH+oYmuffgQY6YUUpK8orMrNEomn5WbFR66m8fffQ3lbputNu2BZ/Ppw2cJCoAR4CBA8rMjmXLlt2yc2fdj5qbm/K7errAtmWPTk0S37juCvryOdNg2BGYEQtCCIAIIMJn7RiZJQQBuuGApjnQH4hi3aad2LXvII62d8u9TUdkbyCi54/Nxxnjx/dMmjz5teuvv+EHs2bNagIgAEgVgMN8rFdWVqbV1tZaa9f+9fLHHnvEX1dXV9Lb2wczErBHZ3jEvAtnU+l5M5Az2gtpRgAGEtd+P4f/HzAMHUIIhMNB6LoDLlcyTClhSol3tzZi9Zq3uCcQkZ29/Zrb7UbOmJzu2XPm3vbT++9/tqSkxFi8eLE9krvkERuAQxcG3HfffTevXbv2d7saG2FGI3aqK1lcdOEMmlc6E+NysyGtMGzLAn0BzTEQzAwbzASWiaEiMdzuJLR392Hdpu3Y39LF727dJfsCAS0vPx/zLp7/2M9/+cC3mFllwOGY+YiImdnz4C9/+S9r1q790caNm6Qnyc3nn12gLSy/AIUFY2FaAZjRKIgI8fltvDm+iL5PQELS+80umGBLhqZrSEpKRltnEC/+z5t4teZtGYnZlJM7lkpKzvnF9Tde/2BeXl77lClTYiNxlkwjMPgEEcnVq1cXv/zyy79/8+03Z4R6A7YdDokrr1hAVy28ADpHEImEISAgPqK7JXzRFWL+QPOzLaE5XCDNiZqN2/CnZ1/iI+39nORJExeWzm196qmnLyWi7SNxuddIWzpERARm1pYsueKPe/fsOaurs80snjbJuGTOTMw4exLIDCJqRiCEAfEJ4XGyznvSBGwrCmlFcMmcYuSMTqMHf/00Nbf3xWpq3sy79trr7jEM46qR2FuNqGvBPp9Pq6+vR8XVVz+xZdPmS3o6j5kl0wuM7956Hc6cMAawIiBpgTQdIHFKpX8ighBALBRC3phMTJoyBbv37NNCwbDl9aYV3bH0u+/dddfyHT5fldbQUM0qAE8xVVVV2ooVK+zx48ffWFNbc09zS4s9cVyWvuwfr0NmioFoJAgiDYIEJAkwAafaiIogQEJHNBrBGWPzkOrxor5uF/cEQtQf7Jty4MCBX+/c+ZcRlQFHzJq1iooKMLN344YNN7S2tEqnQ8B32XyMy0xFLByGEDoYFJ+BMoMS5ZahH//v41cwAAlN09DX3Y5zi6di8qRxorW1FYFAsGDv3rpJAHgkrTUcEb8IMwsA9uuvvz79wKGm88KhIM0qmqSdd9YkhMIBCO39RD8wgqdTvLxBIGg6YWbJl2hsXq5sO9Lm+stfXpgNAEVFRaQC8BRSWVkpAGDDhg1jjx49kmRZpl00dSK8XjeklMNyqh+/rMxI9SYjHApwNBJCQ11dAQCsXLlSBeApedAsKyqlBECUnTUatm0lOt2hH++TUoKZBz+fcgdHAKFQEP39AdhSwqE7MkfaLHhElWFI150gwNAEWxKwbWYcp9ZJRNA0DcwMIoJtn1rX/yUDTBp0wyAGIHThBIDa2toRMwseKRlQAsDcuXPr3C43h8JhHZoD3vQssuTHRyAzw+12A8ApF3xghqbpkNBgW8waCfZ4PAQApaWlqgs+xcaADABz5sw5bBhGB2k6tjbs607Pyt/scrnBYDk06wkhEl2cQH9/PyzLOsXGfxKariFkEbbsrIfNTE63m9LS0xuHnDzk9/v14T4jHhFdcOIaqUZE3fPmzftbcnLqFe9s2Kq9XrsxfWqeB8FImDSNBrPewOeBrvdUKMG8P/tlsNBgiyQ8/scXsWnnHulwObT8/NyWH//4xw/ffffdKCsrk4nf2Rrux25Ynj0fdfb7fD4AoPLy8oeyszPsULA/5cFHHpqwr/kw3G4PYcgkQ0p5SgXdh8d9mm6g5u2NePPtLbAs4vETzjAvnDPnhwDCfr/fsWLFCtnR0ZGycuXKb/z5z38+c6BNhmXyGAEJUPP5fKiqqpKzZs3SN2/ebC5btsz/6ssvV3Z2HjGnT8o37rz9RqR5DJi2BSIBh8MB0zRPyUBkBnSngV8+/Af8bfMBmZyeLhZf/pXax379eFkkGhk4AUctXLiw9vDhw9Nnz5798uOPP774qquuGparqMVwy3yJz8lVVVXXrV279stEZFdXV9tExNu2bTNXrVo1p+lg84WmZbNmOLUdjfuwta4RDqcbzPFxn2VZp1zX+4GswMDC+RchZ0yK6O/r5rVrX5tz2Vcuf2XNmjWLt+3aNmHRokWvbN++fXpfXx80TXtOSoljx46pDHgyThhd1+W1115b1dDQ4MvIyLDy8/NXFRQUrFm+fPlLjz766Nznqp99pLFxV2Yo1MdfmnYGFU4ah8UXX4AMryu+6JTEB8owp179jyBZwnA70drWiz88/QI27dwLZ5IX0wqnIxKJBPbu3evxeDwoKSnZ9cwzz8wkovDg/EVNQr44Pp+PnnvuOaSmpvZHo1GsW7eOUlJSrty6deuVGzZs6G9pavY2Nx1CVkaKPau8RPMtvggZHjdsOwLLjAFEkFJCCPGBCcjA1593MDIATnTzJ5JtSWiIRcIYm+nF9775dTyz6q9YU/OOvX37dgGQx+V02FOnTt16++23X0FEoYEFuMNy/DSc3mx9fT38fj8tWrTotUOHDqUy88xIJCLa24/Zhw41uQJ9/XBQjP/xhivF1YsuAskw7FgEbHMit9Bg5vs0AcHMg10E46PvFeGBhdR/98EgQUhyu+OFFduO3+SE9xe80nFmwkQaLMuCwyCcU1IMEpqo370bELqdn5+v3XzzzbcvWbJkk9/v18vLy4ftItVhlQGHnOVBAN+pqalZuXHjxu899dRTtx492mYbsMUN11xFs2dOR6inAyQYJERiZ8lPzlckBiIKkJKh6xqgGfGAhUQsEv1AEErJ4MRbGvg+EYERLyJHojZ21NUhf2w2Mkelg80YBAEMgiYE4pcNj58JbduGDHfi6iVlMO0QVa+uoaNtR2nNmjXf1XX9pYG9Z1QZ5iTH4oIFC5xlZWWNwWCwnhkUi0b4y+dOp4UXz4YZCUAIAgsRv5w1pGv9uMzHYERjYYQiQUSiYRCAYNjCf1Wvwc9WPoW6XYdgOByDr0UAktxOeD0eJCclwel0wGEYiUYlmDbwx6o1uO8//4T7f/UXtHf0IRqJINDTjb7eXkRCoeMGIDEDzINLyCKBLlz31UtRclah6OvusQ8fPnz+z3/+869XV1fbw3k/wmFZiE6M2WJ79uzJX7p0aeWRI4eRm52mXXn5RZDRfoBtSKLjdnOD000wwEAo0I+YGY7flsmAI1Vgw+Y6vLTmLURsgf7eXqy489uDr2eDsH57Iw42tSA7OweZ6aPg0hn5udkgAcQiMeysb4RFTrzXfAQ76uoxu7gAMTMKEhpCdhROOxlJyR5I8Ee+TwIgiEBCh21bkGYEl/7DhbRjxwHa1bg7+VXHK//BzC8M53HgsAzAyspKAiBra2u9gf5AmhkOY/qUQho3Og12sB+kaYmFp5/c7TIYZsyEZUYhKB4IzBIxKwRTRsBkgaAjJSUlPmRmhuHQsb+lCw/9tgodPSE4XckwdA0FZ2Rh+bJb4YQJT5IT1y5ZiJfW1CInLwMFk86AZcZAAhBCxpeeSvsTSxEEgCVD0wzEwlEUnzkO5xYXijfe3WG3Hj6cu+z73/8BM/9bRUUFAbBVAJ68oYMMBoOXmZEIp6Yk2+UXXaATLLB2YrUlAsGyLDDz4HiEhIAZiaB46kTc9vUl6AuYKJ97HhJ3rUNaNkZnpGLa5Mmo39MEyQQpY8jLy4EmNDBM2JaJ0tklmH1OMSKxfsTCAbAZAUgCIGjQwJLBkj95IMQMljaICYItXHFpOXbsPiDa2o5y29GjPwDwq+rq6p7hmAWHZQDW1NQAAHZs25Z1rK2N8nJyMHXiBNiRLogTnNgTEUADM+T3b8iUEnA5dCy46HwYuhORUBCWFYEgAVvaSHYKLL3Fh2NdvYhGonA6CHk52dBhQjIAEohGQxCC4DQIsaA1uOsCQYCZEldiMFge+rjxafz7DCYNVowxNi8TuaPT0fNeL3V1dpgYxvf2DMsAzMrKYgBoam722JLh0A3IaAQaOD6L/bQpkAUAhsvlghWLgW0zPouVNjRNg8vtRTQSRVSGQTTkHmISsCyG2yEwOT8zPtOWjJgZA3Piv2eOBxczBBlIciUhHAoOFFkgieBwucCCPlAr/PhaJCW2gQM0MEaneUgDOBYJe1evXp0OoDMxNFEZ8ItWXV3NQgikpqSMJyJETZMsacMxUHI5oQkNQdN0uJLcMKMCRBIEBxwOFwynE7ZkQPz9voBEBMmMaCwRdHScGTYzHK4kkKbDtiyABDTDgNB0SJbxicanKIQTAMk2HIaAx5sEyzK5p6fbsW3bpmwAe1UGPLk1QcQsS4tGo5BSQrIEiMF84ju8sGQ4nC44nI4PbNBhSwmwwMfVrCn+RvBpLnIwCIbDBcMx5OYAliDQiV2FIQZIgoQEw2a3243x4yeMBobnzUrDsg5YWloqbNtGb09voyvJjfauLu7pCQwur/8M4QxIArEGQIAhIJmPWzc84dIRAMkMmViHGO+ixWCG/NTvNPEaUtqwiUkTGo/ypLYBQH19PasAPIlmFJ8tXS4XB8MhdPX1QdN1/F+2FWJOjAt54JLZFzu2P/GTJV7ZlBZgON3QNB0Eokg06lUZ8CQqKysDABSXlKwfNWoUhaMR2rRtJyAcQxbff6aOfcjXp97EUoKh6w50d/djZ10j6w6HcLvdPVddfXW9yoAnUWVlpQ1A3HTTTS9kZWW9m+T2inUbd8jG3Yfg9aQAtj0klOiEgi++VP/Uu3GdEO92HQ4n1m3agUOH22xPskfqhv4EEbWUlpbqw3HnrGEZgETEfr9fEFF01syS32WNzqaOnoj1+JPPYe+BIzBcbthSJuasny2QTrVUYkkJtycFR3tCeKV2PSxhsCfJI2bNOnfL0F5BBeBJsmLFCtvv94u7KyufLC4uOeh0ex17m46Zf3hmlewJRCEMDUwSUg4Z+A8jzEhcKYnX/lzedOw9dAwPPvYUjrb32+npGcYFF87du/iSS2oSq8akCsCTfIwS2TB88fz5NyxYcMm7qaMyjM3b6sS2nY3scCdDMuD2JMHldkI34jU3m+3EFeDPLR2fYAql405KBnZqEILgdDnhdLuhO11Y81oN/v0Xj2Dney02DKeWnpEZXLBw8eXnlpY2V1b6abhuXDnsb0oa2DWUmd133HHHkxQNzjivuHDi2ldeto92t4uCSZOpePqZSE91ID8nGxoJmGYUsK3B7DgYRPFVp4n6XmJ3luNs48YUX3r14eVeQ4Poww0dL2APvT00Pr5DYpcGQ9MAXUdPIITmljas37gTB1rb+L39B2XA0gXrLiqYPKmtvHTuLffee+/Lw/2RDiPiDvuBg6BpGizLcjz9+8e/9fDDj/5n4/4DEESWx+WgtGSHOG/WDDpz8gRMGD8GKcka3E4HDN2ALS1oJEBCIGaZkFZ8EiNtGQ+kxNKuD6c3ShS+B64hf7CgzIOtOzRI4zfGx2+OFyTimZkIps3o6e1Hd08/Nm1rxLtbG/lYZz/3BCNsMmlerxfZubly4qTJRxbMm3/FzTdfv7G0tFSvra0d1vcGj5gtHhIrQQQAWwiBH37/+4/WvvPOdV2dHSmBQAixSBRWLGK5XAalpXooNSWJJo0fh3H5eQRpc2b6KJIkUVQ4FQYzDF3A7TSgEcEyY/HrwPHUCLfbhVg0DLYtsJSwpYQ7vgMDLMuGtG1omg6GBs2hA0IgZsYAGe/8rZhEb38I4aiJ+sZdaO/qQXdPEHv3H+KuvgBHoqYk0nWhG3B7PMg/Y1zfjJLizeUXlt+9aNGiHUTUP1IeZjMSNymnxNULfuONN/LXrFnja2jYdVlb25HzmaXr2NFjiMZiMGMxOB06LMuSkydOFNFo1GrvOEbnnFOiHTncjBRPMufmjCFvshsZ6WloaWmGbVmck5NLkXAQbpcTo0dnIinJBQJgCA0x08KBpkOYduY0CKGhs6Mbnd1d8Hq9aGk+jHA4gt6ePu7u7kdHdx+FYxZ6+vqlGTUliEhohqY7daRnpMPj8ViZo7O2TymY+t+/+Nd//Z1z1KjDsVhs6HEbERsUjeQH1WhILNDUNA0vvvji2X09fResfW3tPzQ1NU2RUmaEg4ExuqaJUenp0uVyi4MHmqDrOg41NSEtbRTcTicfOdwic/PztL6+PhmLxYSU0s7KzmZIG51dnYhZYXI7XZyVMRpup4H2jg4AwJjsbLR3diASicIwHGRZEu0dHcQSwjAcMAwnJAgpqWnxCYfTwNj83EhuXt6eMTk5r08umPDHW2751rZoNDp4rPx+P1VWVo6ohxqO6Ccl+f1+UVNTI2pra+VAmUKI+M4I4XDY88YbbxQdO3LMe7D54JFx4/LLdjfuPn/V6pe/dqztmCwsLDximmaeRhqkZcPr8SIcDiFmmkhKTkZykhstzc1oPdIKp8OJsWPHgTQBMHBg/344DAO6riMzKwvJXg9M00Z7ezuSk919GlH0YNOhTClturC0dMe0M79U5fEkH7zpGt/f8idPPhQKhQaPj8/nE1VVVXKkPknztHlYYWIfmYHnbHxkyeKBBx6Y+sQTT+zq6upCeXn5tyoqKlo6j3WmdvV2NUSDwewUr7fXm5qev2fvnmlZ6ZlmX6B3+uHDbemBvkD9qKyMjLTUUcnRaKRx33t7dbfTmTll6hTPmJzcDcFgMJidlX20NxCMzZtXtvOdt965+OGVK5/s7OxARUXFHff+9N5Hhr6P0tJSvaysTJ4OT83UT5cA/HDgMTNVVlZSUVER1dfXEwA4nU6Pw+HgaDRKTqfzmsWLF5d/4hksBFieWJwsXbqMQ6EQbFuCiM72+/16V1eXlp6ebq5YsULW1tZatbW1p8VxOW0C8O/rx/T+srzEvRStra3tzz//fD8zp7S2tkIIgVtvvdXIycmxi4qKqLq6GoWFhYO9RkNDA1dXVw9uGJmVlcWFhYVUU1OD2tpa+Hw+Hvj3RUVFXF9fr1VWVprPPPNM27vr1tttbW3U3tGZ/bvf/8aybftjM7MKwNNEbm5uIBKJcG9vr4xGo+dv3Lhx1syZMzclHv/1sSWPj8tW1dXVH65Xgoh41apVQQZrUkokJye7Trfh0FBChV08G/p8Po2IugoKCn5WXFwsZs6c2TNt2jT6PAOjurpaMjNddtllWyYXTHpt3rx5LWcXz/gP27YH9jdUTmfMTIZhYPXq1eWbN2/OHfjeFzHxY2admdNUqyvHDciTNDs/bakx4EeoqqrS6uvrmYi+yEkBJbYYkarFFUVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRFEVRlGHrfwHXgUUvVIv16gAAAABJRU5ErkJggg==';
+  function renderCharPhonePoop(d) {
+    const p = d.charPhonePoop;
+    const top = cpTopbar('打卡', 'cp-home', '#f7f1ea', 'cp-poop-refresh');
+    if (!p) return top + `<div class="xhs-scroll" style="background:#faf6ef"><div class="xhs-empty">生成中…(没动静就点右上角 ↻)</div></div>`;
+    const li = (pp) => `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${pp}</svg>`;
+    const clock = li('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 1.8"/>');
+    const drop = li('<path d="M12 3.5s5.5 6 5.5 10a5.5 5.5 0 0 1-11 0C6.5 9.5 12 3.5 12 3.5z"/>');
+    const flag = li('<path d="M6 3.5v17M6 5h11l-2 3 2 3H6"/>');
+    const run = li('<circle cx="13" cy="5" r="1.6"/><path d="M6 21l3-5 3 2 1-4M9 16l-1-4 4-2 3 3 2 1"/>');
+    const chip = (bg, c, inner) => `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;border-radius:11px;padding:3px 9px;background:${bg};color:${c}">${inner}</span>`;
+    const smoothSty = (s) => s === '通畅' ? ['#e7f6ec', '#1a9c4e'] : (s === '一般' ? ['#fdf3df', '#c78a12'] : ['#ffe9e6', '#d6492f']);
+    const recs = (p.records || []).map(r => {
+      const ss = smoothSty(r.smooth);
+      return `
+      <div style="margin:10px 12px 0;background:#fff;border-radius:12px;padding:13px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:14.5px;font-weight:700;color:#333">${esc(r.date)} <span style="font-weight:400;color:#b3b3b3;font-size:12px">${esc(r.time)}</span></span><span style="font-size:13px;letter-spacing:1px">${'⭐'.repeat(r.rating || 0)}</span></div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">${chip('#f3ece0', '#8a7050', clock + esc(r.duration || '—'))}${chip(ss[0], ss[1], flag + esc(r.smooth))}${r.color ? chip('#f3ece0', '#8a7050', drop + esc(r.color)) : ''}${r.didWhat ? chip('#f3ece0', '#8a7050', run + '动作 ' + esc(r.didWhat)) : ''}</div>
+        ${r.shape ? `<div style="margin-top:10px;font-size:13.5px;color:#444;line-height:1.5">📋 ${esc(r.shape)}</div>` : ''}
+        ${r.comment ? `<div style="margin-top:8px;font-size:13px;color:#8a7050;background:#faf6ef;border-radius:8px;padding:8px 10px;line-height:1.5">"${esc(r.comment)}"</div>` : ''}
+      </div>`;
+    }).join('');
+    const heroImg = `<img src="${POOP_IMG}" style="height:66px;object-fit:contain${p.todayPooped ? '' : ';opacity:.32;filter:grayscale(.5)'}"/>`;
+    return top + `<div class="xhs-scroll" style="background:#faf6ef">
+      <div style="background:linear-gradient(160deg,#c79a6b,#a9794d);padding:16px 16px 18px;color:#fff;text-align:center">
+        <div style="height:66px;display:flex;align-items:center;justify-content:center">${heroImg}</div>
+        <div style="font-size:17px;font-weight:700;margin-top:8px">${p.todayPooped ? '今天已打卡!' : '今天还没拉,加油 💪'}</div>
+        <div style="font-size:12.5px;opacity:.92;margin-top:6px">🔥 已连续打卡 ${p.streak || 0} 天 · 最近 ${(p.records || []).length} 次记录</div>
+      </div>
+      ${p.tip ? `<div style="margin:10px 12px 0;background:#fff8ee;border:1px solid #f0e2cc;border-radius:10px;padding:10px 13px;font-size:13px;color:#9a7b4f;line-height:1.5">💡 健康小助手:${esc(p.tip)}</div>` : ''}
+      ${recs || '<div class="xhs-empty">还没有记录</div>'}
+      <div style="height:22px"></div>
+    </div>`;
   }
 
   function renderWxChats(d) {
@@ -1406,11 +2145,45 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
         </details>
 
         <details class="xhs-set-section">
+          <summary class="xhs-set-title">📱 ta 的手机</summary>
+          <div class="xhs-set-help">桌面那个「ta 的手机」app(只单人卡能打开,多人卡敬请期待)。app 图标在上面「App 图标」里改</div>
+          <div class="xhs-pub-row" style="margin-top:8px">
+            <label>进去后的主屏背景图 URL(留空用默认深紫渐变)</label>
+            <input id="set-charphone-bg" value="${esc(d.charPhoneBg || '')}" placeholder="贴图片链接"/>
+          </div>
+          <div class="xhs-pub-row" style="margin-top:8px">
+            <label>锁屏背景图 URL(留空跟随主屏背景)</label>
+            <input id="set-cplockbg" value="${esc(d.charPhoneLockBg || '')}" placeholder="贴图片链接"/>
+          </div>
+          <div class="xhs-pub-row" style="margin-top:8px;display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="set-cp-darktext" ${d.charPhoneTextColor === 'dark' ? 'checked' : ''} style="width:auto"/>
+            <label style="margin:0">桌面/锁屏文字用黑色(浅色壁纸时勾上)</label>
+          </div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>微信图标 URL</label><input id="set-cpicon-wx" value="${esc((d.charPhoneIcons || {}).wx || '')}" placeholder="留空用默认 💬"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>备忘录图标 URL</label><input id="set-cpicon-notes" value="${esc((d.charPhoneIcons || {}).notes || '')}" placeholder="留空用默认 📝"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>Safari 图标 URL</label><input id="set-cpicon-safari" value="${esc((d.charPhoneIcons || {}).safari || '')}" placeholder="留空用默认 🧭"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>网易云 图标 URL</label><input id="set-cpicon-music" value="${esc((d.charPhoneIcons || {}).music || '')}" placeholder="留空用默认 🎵"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>淘宝 图标 URL</label><input id="set-cpicon-taobao" value="${esc((d.charPhoneIcons || {}).taobao || '')}" placeholder="留空用默认 🛒"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>支付宝 图标 URL</label><input id="set-cpicon-alipay" value="${esc((d.charPhoneIcons || {}).alipay || '')}" placeholder="留空用默认 💰"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>豆包 图标 URL</label><input id="set-cpicon-doubao" value="${esc((d.charPhoneIcons || {}).doubao || '')}" placeholder="留空用默认 🫛"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>拉屎 图标 URL</label><input id="set-cpicon-poop" value="${esc((d.charPhoneIcons || {}).poop || '')}" placeholder="留空用默认 💩"/></div>
+          <div class="xhs-pub-row" style="margin-top:14px">
+            <label>🎁 外观分享(图标 + 壁纸)— 可应用到别的聊天 / 别人的酒馆</label>
+            <button class="xhs-set-btn" data-action="cp-theme-export" style="background:#9b6dff">⬆ 导出当前外观</button>
+            <textarea id="cp-theme-out" rows="3" readonly placeholder="点上面「导出」后,这里会出现一串代码,复制发给别人" style="margin-top:6px"></textarea>
+            <textarea id="cp-theme-in" rows="3" placeholder="把别人给你的外观代码粘到这里,再点下面「导入」" style="margin-top:6px"></textarea>
+            <button class="xhs-set-btn" data-action="cp-theme-import" style="background:#5aa96b;margin-top:6px">⬇ 导入外观(套用)</button>
+            <div class="xhs-set-help">导出的是图标 URL + 壁纸 URL + 字体色设置。对方网络能打开这些图片链接才会显示;用的是内置默认图(如那只屎)的不受影响。</div>
+          </div>
+        </details>
+
+        <details class="xhs-set-section">
           <summary class="xhs-set-title">📱 App 图标(自定义)</summary>
           <div class="xhs-set-help">填图片 URL 换掉桌面上的 App 图标,留空用默认</div>
           <div class="xhs-pub-row"><label>📕 小红书</label><input id="set-icon-xhs" value="${esc((d.appIcons || {}).xhs || '')}" placeholder="图片URL"/></div>
           <div class="xhs-pub-row"><label>💬 微信</label><input id="set-icon-wx" value="${esc((d.appIcons || {}).wx || '')}" placeholder="图片URL"/></div>
           <div class="xhs-pub-row"><label>⚙️ 设置</label><input id="set-icon-set" value="${esc((d.appIcons || {}).set || '')}" placeholder="图片URL"/></div>
+          <div class="xhs-pub-row"><label>📱 ta 的手机</label><input id="set-cpappicon" value="${esc(d.charPhoneAppIcon || '')}" placeholder="图片URL"/></div>
         </details>
 
         <details class="xhs-set-section">
@@ -7296,6 +8069,11 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     // 手机通用:主页背景 / 气泡颜色
     if (has('set-extra-prompt')) d.extraPrompt = (readInputCache('set-extra-prompt') || '').trim().slice(0, 4000);
     if (has('set-chatstyle')) d.chatStyle = (readInputCache('set-chatstyle') || '').trim().slice(0, 4000);
+    if (has('set-cpappicon')) { d.charPhoneAppIcon = (readInputCache('set-cpappicon') || '').trim(); }
+    if (has('set-charphone-bg')) { d.charPhoneBg = (readInputCache('set-charphone-bg') || '').trim(); }
+    if (has('set-cplockbg')) { d.charPhoneLockBg = (readInputCache('set-cplockbg') || '').trim(); }
+    if (has('set-cp-darktext')) { d.charPhoneTextColor = chk('set-cp-darktext') ? 'dark' : 'light'; }
+    if (has('set-cpicon-wx')) { d.charPhoneIcons = Object.assign({}, d.charPhoneIcons, { wx: (readInputCache('set-cpicon-wx') || '').trim(), notes: (readInputCache('set-cpicon-notes') || '').trim(), safari: (readInputCache('set-cpicon-safari') || '').trim(), music: (readInputCache('set-cpicon-music') || '').trim(), taobao: (readInputCache('set-cpicon-taobao') || '').trim(), alipay: (readInputCache('set-cpicon-alipay') || '').trim(), doubao: (readInputCache('set-cpicon-doubao') || '').trim(), poop: (readInputCache('set-cpicon-poop') || '').trim() }); }
     if (has('set-home-bgurl')) {
       const u = (readInputCache('set-home-bgurl') || '').trim();
       if (u) d.homeBg = `center/cover no-repeat url("${u.replace(/"/g, '')}")`;
@@ -7873,6 +8651,51 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'del-dm': await deleteDm(id); break;
           case 'dismiss-notif': await dismissNotif(id); break;
           case 'open-app': await openApp(app); break;
+          case 'open-charphone': await openCharPhone(); break;
+          case 'cp-open': await cpNav(route); if (route === 'cp-music') { const dm = loadData(); if (!dm.charPhoneMusic) genCharMusic(); } else if (route === 'cp-taobao') { const dm = loadData(); if (!dm.charPhoneTaobao) genCharTaobao(); } else if (route === 'cp-alipay') { const dm = loadData(); if (!dm.charPhoneAlipay) genCharAlipay(); } else if (route === 'cp-doubao') { const dm = loadData(); if (!dm.charPhoneDoubao) genCharDoubao(); } else if (route === 'cp-poop') { const dm = loadData(); if (!dm.charPhonePoop) genCharPoop(); } break;
+          case 'cp-music-refresh': await genCharMusic(); break;
+          case 'cp-tb-refresh': await genCharTaobao(); break;
+          case 'cp-tb-orders': await cpNav('cp-tb-orders', { tbStatus: cat || null }); break;
+          case 'cp-ali-refresh': await genCharAlipay(); break;
+          case 'cp-doubao-refresh': await genCharDoubao(); break;
+          case 'cp-poop-refresh': await genCharPoop(); break;
+          case 'cp-ali-cat': { const dd = loadData(); dd.routeContext = dd.routeContext || {}; dd.routeContext.aliCat = cat || '全部'; await saveData(dd); refreshXhs(); break; }
+          case 'cp-back': await cpNav(route); break;
+          case 'cp-open-chat': await cpNav('cp-wx-chat', { cpChat: $btn.data('idx') }); break;
+          case 'cp-note-open': await cpNav('cp-note', { cpNote: $btn.data('idx') }); break;
+          case 'clear-cp-search': { const TP = getTop(); const dd = loadData(); if (dd.charPhone && (TP.confirm ? TP.confirm('清空 ta 的搜索记录?') : true)) { dd.charPhone.safari = []; dd.routeContext.cpSafari = null; await saveData(dd); refreshXhs(); } break; }
+          case 'cp-refresh': await genCharPhone(); break;
+          case 'cp-unlock': await cpNav('cp-home'); break;
+          case 'cp-theme-export': {
+            const dd = loadData();
+            const theme = { app: 'yuyuan', type: 'charphone-theme', v: 1, icons: dd.charPhoneIcons || {}, appIcon: dd.charPhoneAppIcon || '', bg: dd.charPhoneBg || '', lockBg: dd.charPhoneLockBg || '', textColor: dd.charPhoneTextColor || 'light' };
+            const str = JSON.stringify(theme);
+            const out = getTop().document.getElementById('cp-theme-out');
+            if (out) { out.value = str; try { out.select(); } catch (e) {} }
+            try { (getTop().navigator.clipboard || navigator.clipboard).writeText(str); toastr.success('已生成并复制到剪贴板,直接粘给别人即可'); }
+            catch (e) { toastr.success('已生成,手动复制下面框里的代码发给别人'); }
+            break;
+          }
+          case 'cp-theme-import': {
+            const el = getTop().document.getElementById('cp-theme-in');
+            const txt = ((el && el.value) || '').trim();
+            if (!txt) { toastr.warning('先把别人给的外观代码粘到框里'); break; }
+            let obj = null; try { obj = JSON.parse(txt); } catch (e) {}
+            if (!obj || obj.type !== 'charphone-theme') { toastr.error('代码不对,确认粘的是「外观代码」整段'); break; }
+            const dd = loadData();
+            if (obj.icons && typeof obj.icons === 'object') dd.charPhoneIcons = Object.assign({}, dd.charPhoneIcons, obj.icons);
+            if (typeof obj.appIcon === 'string') dd.charPhoneAppIcon = obj.appIcon;
+            if (typeof obj.bg === 'string') dd.charPhoneBg = obj.bg;
+            if (typeof obj.lockBg === 'string') dd.charPhoneLockBg = obj.lockBg;
+            if (obj.textColor === 'dark' || obj.textColor === 'light') dd.charPhoneTextColor = obj.textColor;
+            await saveData(dd);
+            refreshXhs();
+            toastr.success('✓ 外观已导入并应用');
+            break;
+          }
+          case 'cp-refresh-all': await genCharAll(); break;
+          case 'cp-music-tab': { const dd = loadData(); dd.routeContext = dd.routeContext || {}; dd.routeContext.musicTab = cat || 'rec'; await saveData(dd); refreshXhs(); break; }
+          case 'cp-safari-toggle': { const dd = loadData(); const ix = $btn.data('idx'); dd.routeContext.cpSafari = (String(dd.routeContext.cpSafari) === String(ix)) ? null : ix; await saveData(dd); refreshXhs(); break; }
           case 'go-home': await goHome(); break;
           case 'min-phone': minimizeXhs(); break;
           case 'close-phone': closeXhs(); break;
@@ -9047,7 +9870,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v288 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v313 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

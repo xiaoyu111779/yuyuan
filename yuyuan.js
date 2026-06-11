@@ -1089,7 +1089,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
 【${cname} 的人设/性格】:\n${role}
 ${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n` : ''}${ubio ? `【${uname}(机主在意的人)的资料】:${ubio}\n` : ''}
 要生成三部分:
-1) wx(微信):ta 和【世界书里其他 NPC】的私聊。按【ta 和每个 NPC 各自的人设、以及世界书设定】来写,贴合设定和当前剧情。给 3~6 个联系人(家人/朋友/同事/老板/暧昧对象/前任等——看世界书和人设里【真实存在】谁,别硬编),每人 2~6 条来回。视角是 ta 的手机:ta 自己发的标 "ta",对方标 "them"。每个联系人再给 time:你俩【最后说话的时间标签】(像"刚刚""昨天 22:10""周二""3天前"),不同联系人时间【各不相同】(有的刚聊、有的很久没聊),像真实微信列表。要透出潜台词(ta 私下怎么评价 ${uname}、ta 的秘密、ta 真实的状态情绪),但不许跟人设剧情冲突。
+1) wx(微信):ta 和【世界书里其他 NPC】的私聊。按【ta 和每个 NPC 各自的人设、以及世界书设定】来写,贴合设定和当前剧情。给 3~6 个联系人(家人/朋友/同事/老板/暧昧对象/前任等——看世界书和人设里【真实存在】谁,别硬编)。【极其重要:绝对不要生成跟「${uname}」(也就是 {{user}} 机主本人,别名都算)的对话!ta 和 ${uname} 的聊天已经单独显示在「你们的聊天」里了,这里【只放 ta 跟除 ${uname} 以外的其他人】的私聊,严禁出现名字是 ${uname} 或其别名的联系人。】每人 2~6 条来回。视角是 ta 的手机:ta 自己发的标 "ta",对方标 "them"。每个联系人再给 time:你俩【最后说话的时间标签】(像"刚刚""昨天 22:10""周二""3天前"),不同联系人时间【各不相同】(有的刚聊、有的很久没聊),像真实微信列表。要透出潜台词(ta 私下怎么评价 ${uname}、ta 的秘密、ta 真实的状态情绪),但不许跟人设剧情冲突。
 2) notes(备忘录):ta 的待办事项,以及 ta 自己的事/碎碎念/计划/灵感(都按 ta 的人设来写,贴合剧情)。
 3) safari(搜索记录):ta 最近的浏览器搜索,要做到:①【反差】暴露 ta 真实的恐惧/无知/渴望/纠结,跟 ta 外在的冷静强硬相反;②【递进】几条之间体现思维变化(理智查询→情绪失控,或犹豫→坚定);③【真实】模仿真人搜索关键词习惯,用破碎短句或具体名词,【别写成完整句子】。每条给:query(搜索词)、time(这条搜的时间点,短标签,像"刚刚""凌晨2:41""昨天 23:10";失眠递进可以都落在深夜)、inner(ta 搜到答案后的【内心戏】,当时心里怎么想,1~3 句,可与外在反差)。${cpAttitudeRule(uname)}
 严格 JSON,不要解释:
@@ -1099,6 +1099,8 @@ ${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n
     const j = tryParseJSON(raw, null);
     if (!j || (!Array.isArray(j.wx) && !Array.isArray(j.notes) && !Array.isArray(j.safari))) { toastr.warning('这次没解析出内容,再点一次🔄'); return; }
     const d = loadData();
+    const _ualias = String(uname || '').split(/[\/、,，()()\s|]+/).map(s => s.trim().toLowerCase()).filter(s => s.length >= 1);
+    const _isUserName = (nm) => { nm = String(nm || '').trim().toLowerCase(); if (!nm) return false; return _ualias.some(u => u && (nm === u || (u.length >= 2 && nm.indexOf(u) >= 0))); };
     d.charPhone = {
       genAt: Date.now(),
       wx: (Array.isArray(j.wx) ? j.wx : []).slice(0, 8).map(c => ({
@@ -1106,7 +1108,7 @@ ${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n
         relation: String(c.relation || '').slice(0, 20),
         time: String(c.time || '').slice(0, 12),
         msgs: (Array.isArray(c.msgs) ? c.msgs : []).slice(0, 12).map(m => ({ from: m.from === 'ta' ? 'ta' : 'them', text: String(m.text || '').slice(0, 200) })).filter(m => m.text),
-      })).filter(c => c.msgs.length),
+      })).filter(c => c.msgs.length && !_isUserName(c.name)),
       notes: (Array.isArray(j.notes) ? j.notes : []).slice(0, 10).map(n => ({ title: String(n.title || '').slice(0, 30), body: String(n.body || '').slice(0, 600) })).filter(n => n.title || n.body),
       safari: (Array.isArray(j.safari) ? j.safari : []).slice(0, 14).map(s => ({ query: String(s.query || '').slice(0, 60), time: String(s.time || '').slice(0, 12), inner: String(s.inner || '').slice(0, 300) })).filter(s => s.query),
     };
@@ -1351,9 +1353,9 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     if (url) return `<img src="${esc(url)}" style="width:${size}px;height:${size}px;border-radius:${rad}px;object-fit:cover;flex-shrink:0"/>`;
     return `<div style="width:${size}px;height:${size}px;border-radius:${rad}px;background:${bg || '#cfd6e4'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:${Math.round(size * 0.42)}px;flex-shrink:0">${esc((letter || '?').slice(0, 1))}</div>`;
   }
-  function cpUserAvatar(d, size) { return cpAvatar(d.wxAvatar, d.userName || '我', size, d.avatarBg); }
-  function cpCharAvatar(d, size) { const r = cpRealDm(d); return cpAvatar(r && r.avatar, charDisplayName(d), size); }
-  function cpNpcAvatar(d, name, size) { const ct = (d.dms || []).find(x => x.app === 'wx' && (x.remark === name || x.name === name) && x.avatar); return cpAvatar(ct && ct.avatar, name, size); }
+  function cpUserAvatar(d, size) { return cpAvatar(d.wxAvatar || d.userAvatar, d.userName || '我', size, d.avatarBg); }
+  function cpCharAvatar(d, size) { const r = cpRealDm(d); return cpAvatar((r && r.avatar) || d.charAvatar, charDisplayName(d), size); }
+  function cpNpcAvatar(d, name, size) { const ct = (d.dms || []).find(x => x.app === 'wx' && (x.remark === name || x.name === name) && x.avatar); let url = ct && ct.avatar; if (!url) { const cm = (d.cast || []).find(c => c.name === name); if (cm && cm.avatar) url = cm.avatar; } return cpAvatar(url, name, size); }
   function cpYuan(n) { n = Number(n) || 0; return Number.isInteger(n) ? n.toLocaleString('en-US') : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function cpMallTag(m) { return m === '天猫' ? '<span style="color:#ff0036;font-weight:700;font-size:12.5px">天猫</span>' : '<span style="color:#ff5000;font-weight:700;font-size:12.5px">淘宝</span>'; }
   function tbOrderIcon(kind) {
@@ -9875,7 +9877,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v314 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v316 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

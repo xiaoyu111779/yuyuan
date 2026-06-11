@@ -2416,6 +2416,26 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     toastr.success('已删除');
   }
   // 改单条消息的剧情时间戳;并可一键设为"当前剧情时间"(锁定,之后不再被 AI 自动改动)
+  async function editMsgText(idx) {
+    const i = parseInt(idx);
+    if (isNaN(i)) return;
+    const TOP = getTop();
+    let d = loadData();
+    const arr = currentChatArr(d);
+    if (!arr || !arr[i]) { d.routeContext.delIdx = null; await saveData(d); refreshXhs(); return; }
+    const cur = String(arr[i].text || '');
+    const val = TOP.prompt('修改这条消息的文字:', cur);
+    d = loadData();
+    const arr2 = currentChatArr(d);
+    if (val === null || !arr2 || !arr2[i]) { d.routeContext.delIdx = null; await saveData(d); refreshXhs(); return; }
+    const t = String(val).trim();
+    if (!t) { toastr.info('内容空了;想删这条就用「删除」'); d.routeContext.delIdx = null; await saveData(d); refreshXhs(); return; }
+    arr2[i].text = t.slice(0, 1000);
+    d.routeContext.delIdx = null;
+    await saveData(d);
+    refreshXhs();
+    toastr.success('已改这条消息');
+  }
   async function editMsgTime(idx) {
     const i = parseInt(idx);
     if (isNaN(i)) return;
@@ -5380,8 +5400,10 @@ ${ctx}`;
     const dmlog = dedupImportLog(dm, log);
     if (!dmlog.length) { toastr.info('这些消息之前都导入过了,没有新内容'); return; }
     const tk0 = Date.now();
-    dmlog.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
-    const reordered = useST ? sortChatByStoryTime(dm.messages) : false;
+    const newMsgs = dmlog.map(m => ({ role: m.role, text: m.text, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }));
+    if (useST) sortChatByStoryTime(newMsgs); // 只对【这批新导入的】内部按剧情时间稳定排序,不碰旧消息(避免混合"5月20日"/"第二天"格式把新消息错排到顶)
+    newMsgs.forEach((m, i) => { m.time = tk0 + i * 1000; dm.messages.push(m); });
+    const reordered = useST; // 这批已内部按剧情时间排好,再整批追加到末尾
     dm.lastTime = Date.now();
     dm.unread = dmlog.some(m => m.role === 'npc');
     d.currentApp = 'xhs';
@@ -5441,8 +5463,10 @@ ${ctx}`;
     const dmlog = dedupImportLog(dm, log);
     if (!dmlog.length) { toastr.info('这些消息之前都导入过了,没有新内容'); return; }
     const tk0 = Date.now();
-    dmlog.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
-    const reordered = useST ? sortChatByStoryTime(dm.messages) : false;
+    const newMsgs = dmlog.map(m => ({ role: m.role, text: m.text, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }));
+    if (useST) sortChatByStoryTime(newMsgs); // 只对【这批新导入的】内部按剧情时间稳定排序,不碰旧消息(避免混合"5月20日"/"第二天"格式把新消息错排到顶)
+    newMsgs.forEach((m, i) => { m.time = tk0 + i * 1000; dm.messages.push(m); });
+    const reordered = useST; // 这批已内部按剧情时间排好,再整批追加到末尾
     dm.lastTime = Date.now();
     dm.unread = dmlog.some(m => m.role === 'npc');
     d.currentApp = 'wx';
@@ -5492,8 +5516,10 @@ ${ctx}`;
     const dmlog = dedupImportLog(dm, log);
     if (!dmlog.length) { toastr.info('这些消息之前都导入过了,没有新内容'); return; }
     const tk0 = Date.now();
-    dmlog.forEach((m, i) => { dm.messages.push({ role: m.role, text: m.text, time: tk0 + i * 1000, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }); });
-    const reordered = useST ? sortChatByStoryTime(dm.messages) : false;
+    const newMsgs = dmlog.map(m => ({ role: m.role, text: m.text, st: (useST && m.time) ? m.time.slice(0, 40) : stStamp(d) }));
+    if (useST) sortChatByStoryTime(newMsgs); // 只对【这批新导入的】内部按剧情时间稳定排序,不碰旧消息(避免混合"5月20日"/"第二天"格式把新消息错排到顶)
+    newMsgs.forEach((m, i) => { m.time = tk0 + i * 1000; dm.messages.push(m); });
+    const reordered = useST; // 这批已内部按剧情时间排好,再整批追加到末尾
     dm.lastTime = Date.now();
     dm.unread = dmlog.some(m => m.role === 'npc');
     d.currentApp = isWx ? 'wx' : 'xhs';
@@ -6100,7 +6126,7 @@ ${xhsNameRule()}
           ${(!isMe && opts.showName) ? `<div class="xhs-cmsg-name">${esc(who)}</div>` : ''}
           ${quoteBlock}
           ${inner}
-          ${(opts.idx != null && opts.delIdx === opts.idx) ? `<div class="xhs-msg-menu"><button data-action="msg-quote" data-idx="${opts.idx}">引用</button>${d.useStoryTime ? `<button data-action="msg-time" data-idx="${opts.idx}">改时间</button>` : ''}<button data-action="del-msg" data-idx="${opts.idx}">删除</button><button data-action="msg-multi" data-idx="${opts.idx}">多选</button></div>` : ''}
+          ${(opts.idx != null && opts.delIdx === opts.idx) ? `<div class="xhs-msg-menu"><button data-action="msg-quote" data-idx="${opts.idx}">引用</button><button data-action="msg-edit" data-idx="${opts.idx}">改字</button>${d.useStoryTime ? `<button data-action="msg-time" data-idx="${opts.idx}">改时间</button>` : ''}<button data-action="del-msg" data-idx="${opts.idx}">删除</button><button data-action="msg-multi" data-idx="${opts.idx}">多选</button></div>` : ''}
         </div>
       </div>`;
   }
@@ -8802,6 +8828,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'set-dm-avatar': await setDmAvatar(id); break;
           case 'del-msg': await delChatMsg($btn.data('idx')); break;
           case 'msg-time': await editMsgTime($btn.data('idx')); break;
+          case 'msg-edit': await editMsgText($btn.data('idx')); break;
           case 'read-story-time': await extractStoryTime(); break;
           case 'del-comment': await delComment(id, $btn.data('cid')); break;
           case 'cmt-multi': await cmtMulti(id, $btn.data('cid')); break;
@@ -9964,7 +9991,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v326 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v328 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

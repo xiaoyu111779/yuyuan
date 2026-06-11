@@ -10,7 +10,7 @@
   // ============ 数据 ============
   const STORE_KEY = 'xhs_data_v1';
   // 外观字段:全局共享(换对话不变);其余数据各对话各存
-  const APPEARANCE_KEYS = ['homeBg', 'homeText', 'appIcons', 'charmImg', 'charmImg2', 'charmOff', 'bubbleMe', 'bubbleOther'];
+  const APPEARANCE_KEYS = ['homeBg', 'homeText', 'appIcons', 'charmImg', 'charmImg2', 'charmOff', 'bubbleMe', 'bubbleOther', 'charPhoneIcons', 'charPhoneAppIcon', 'charPhoneBg', 'charPhoneLockBg', 'charPhoneTextColor'];
   const GLOBAL_APPEARANCE_KEY = 'xhs_appearance_v1';
   const GLOBAL_PREFS_KEY = 'xhs_global_prefs_v1';
   // 全局共享(跨对话跨卡):热梗/表情包/禁词/全局附加提示词/整体聊天风格(活人感)
@@ -29,6 +29,11 @@
     charmImg2: 'https://img.cdn1.vip/i/6a21ed9291640_1780608402.webp',
     bubbleMe: '#fbdaef',
     bubbleOther: '#ffffff',
+    charPhoneIcons: { wx: 'https://img.cdn1.vip/i/6a2aae4e1fd9d_1781182030.webp', notes: 'https://img.cdn1.vip/i/6a2aae57bc624_1781182039.webp', safari: 'https://img.cdn1.vip/i/6a2ab01033f2e_1781182480.webp', music: 'https://img.cdn1.vip/i/6a2aae68bf3da_1781182056.webp', taobao: 'https://img.cdn1.vip/i/6a2aae86e1cc3_1781182086.webp', alipay: 'https://img.cdn1.vip/i/6a2aae8698d3b_1781182086.webp', doubao: 'https://img.cdn1.vip/i/6a2ab151cbd1a_1781182801.jpg', poop: 'https://img.cdn1.vip/i/6a2ab13f8310e_1781182783.webp' },
+    charPhoneAppIcon: 'https://img.cdn1.vip/i/6a2ab23784bf3_1781183031.jpg',
+    charPhoneBg: 'https://img.cdn1.vip/i/6a2ab1d51dc48_1781182933.webp',
+    charPhoneLockBg: '',
+    charPhoneTextColor: 'dark',
   };
   const DEFAULT_DATA = {
     api: { useMainApi: true, proxy_preset: '', apiurl: '', key: '', model: '', source: '', temperature: 0.8 },
@@ -104,11 +109,11 @@
     routeContext: {},
     feed: [],
     charPhone: null,        // 偷看 char 手机:{ genAt, wx:[], notes:[], safari:[] }(单人卡)
-    charPhoneBg: 'https://img.cdn1.vip/i/6a2ab1d51dc48_1781182933.webp',        // char 手机主屏背景(图片 url 或渐变)
-    charPhoneLockBg: '',    // char 手机锁屏背景(图片 url 或渐变)
-    charPhoneTextColor: 'dark', // 桌面/锁屏字体色:light 白 / dark 黑
-    charPhoneIcons: { wx: 'https://img.cdn1.vip/i/6a2aae4e1fd9d_1781182030.webp', notes: 'https://img.cdn1.vip/i/6a2aae57bc624_1781182039.webp', safari: 'https://img.cdn1.vip/i/6a2ab01033f2e_1781182480.webp', music: 'https://img.cdn1.vip/i/6a2aae68bf3da_1781182056.webp', taobao: 'https://img.cdn1.vip/i/6a2aae86e1cc3_1781182086.webp', alipay: 'https://img.cdn1.vip/i/6a2aae8698d3b_1781182086.webp', doubao: 'https://img.cdn1.vip/i/6a2ab151cbd1a_1781182801.jpg', poop: 'https://img.cdn1.vip/i/6a2ab13f8310e_1781182783.webp' },     // char 手机 app 自定义图标默认值
-    charPhoneAppIcon: 'https://img.cdn1.vip/i/6a2ab23784bf3_1781183031.jpg',   // 桌面上「ta 的手机」这个 app 自己的图标
+    charPhoneBg: '',        // char 手机主屏背景(留空→走全局/THEME_DEFAULTS)
+    charPhoneLockBg: '',    // char 手机锁屏背景
+    charPhoneTextColor: '', // 桌面/锁屏字体色:light/dark(留空→走 THEME_DEFAULTS)
+    charPhoneIcons: {},     // char 手机 app 自定义图标(留空→走 THEME_DEFAULTS)
+    charPhoneAppIcon: '',   // 桌面「ta 的手机」图标(留空→走 THEME_DEFAULTS)
     charPhoneMusic: null,   // ta 的网易云:{ genAt, songs:[] }
     charPhoneTaobao: null,  // ta 的淘宝:{ genAt, vip, saved, counts, cart:[], orders:[] }
     charPhoneAlipay: null,  // ta 的支付宝:{ genAt, balance, yuebao, banks:[], bills:[] }
@@ -138,14 +143,14 @@
     try { if (typeof getVariables === 'function') ga = getVariables({ type: 'global' })[GLOBAL_APPEARANCE_KEY] || null; } catch (e) {}
     APPEARANCE_KEYS.forEach(k => {
       if (ga && ga[k] !== undefined) {
-        d[k] = (k === 'appIcons') ? Object.assign({}, ga[k] || {}) : ga[k];
+        d[k] = (k === 'appIcons' || k === 'charPhoneIcons') ? Object.assign({}, ga[k] || {}) : ga[k];
       } else {
         // 全局没存(或全局变量在本环境不可用)→ 优先保留本对话已存的外观,实在没有才用默认
-        const hasLocal = (k === 'appIcons')
-          ? (d.appIcons && Object.values(d.appIcons).some(v => v))
+        const hasLocal = (k === 'appIcons' || k === 'charPhoneIcons')
+          ? (d[k] && Object.values(d[k]).some(v => v))
           : (d[k] !== undefined && d[k] !== '');
         if (!hasLocal && THEME_DEFAULTS[k] !== undefined) {
-          d[k] = (k === 'appIcons') ? Object.assign({}, THEME_DEFAULTS.appIcons) : THEME_DEFAULTS[k];
+          d[k] = (k === 'appIcons' || k === 'charPhoneIcons') ? Object.assign({}, THEME_DEFAULTS[k]) : THEME_DEFAULTS[k];
         }
       }
     });
@@ -9870,7 +9875,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v313 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v314 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

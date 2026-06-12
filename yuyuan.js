@@ -1533,7 +1533,7 @@ ${uinfo}
 - lastChange:上次换是多久前(像"今早刚换""两天没换了")
 - weekCount:本周换了几次(整数)
 - note:一句习惯吐槽(讲究人天天换还分场合 / 邋遢到能穿出感情)
-3) week(本周每天):7 个,从最早到今天,每个 { day:"星期几", color:"颜色名", colorHex:"#色值", styleType:形状四选一(三角/平角/丁字/没穿), changed:这天有没有换新的(true/false) }。要跟 habit 的频率对得上。
+3) week(本周每天):7 个,从最早到今天,每个 { day:"星期几", color:"颜色名", colorHex:"#色值", styleType:形状四选一(三角/平角/丁字/没穿), changed:这天有没有换新的(true/false) }。【自洽硬要求】week 里 changed=true 的天数,必须和 habit.changeEvery 一致(每天必换=7天全 true;隔天换≈3-4天 true;能拖就拖=1-2天 true),别七天全 true 又说只换了几次。
 ${cpAttitudeRule(uname)}
 严格只输出 JSON,不要解释:
 {"today":{"color":"藏青","colorHex":"#2b3a67","style":"纯棉三角","styleType":"三角","pattern":"纯色","worn":true,"bandHex":"#111111","logo":true,"bandText":"CK","voiceTitle":"鸡巴有话说","voice":"..."},"habit":{"changeEvery":"1-2天","lastChange":"今早刚换","weekCount":4,"note":"..."},"week":[{"day":"周一","color":"黑","colorHex":"#222222","styleType":"平角","changed":true}]}`;
@@ -1555,7 +1555,7 @@ ${cpAttitudeRule(uname)}
     d.charPhoneKuchazi = {
       genAt: Date.now(),
       today: { color: clip(tt.color, 12), colorHex: hx(tt.colorHex), style: clip(tt.style, 40), styleType: shapeFrom(tt.styleType, tt.style), pattern: clip(tt.pattern, 30), worn: tt.worn !== false, bandHex: hxe(tt.bandHex), logo: !!tt.logo, bandText: clip(tt.bandText, 6), voiceTitle: clip(tt.voiceTitle, 20), voice: clip(tt.voice, 600) },
-      habit: { changeEvery: clip(hh.changeEvery, 20), lastChange: clip(hh.lastChange, 20), weekCount: parseInt(hh.weekCount) || 0, note: clip(hh.note, 160) },
+      habit: { changeEvery: clip(hh.changeEvery, 20), lastChange: clip(hh.lastChange, 20), weekCount: week.length ? week.filter(w => w.changed).length : (parseInt(hh.weekCount) || 0), note: clip(hh.note, 160) },
       week,
     };
     await saveData(d);
@@ -10467,7 +10467,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v357 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v358 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

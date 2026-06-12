@@ -105,6 +105,7 @@
     wxAvatar: '',             // 微信头像 URL
     wxBio: '',                // 微信个性签名
     cast: [],                 // 多人卡出场角色花名册:[{id,name,persona,avatar}];空=单 char 行为不变
+    castAutoTried: false,     // 本对话是否已自动识别过出场角色(只自动跑一次,避免反复打扰/重复请求)
     currentRoute: 'feed',
     routeContext: {},
     feed: [],
@@ -553,10 +554,10 @@
     return { books: [...names], entries };
   }
   // 给上下文注入用:拼接【启用】条目内容(行为同旧版:默认前40条/4000字)
-  async function getWorldbookContent(charLimit, maxEntries) {
+  async function getWorldbookContent() {
+    // 读【全部启用条目】,不设字数/条数上限(旧调用传的参数会被忽略,不再截断)
     const { entries } = await getWorldbookEntriesRaw();
-    const out = entries.filter(e => e.enabled !== false && e.content).map(e => e.content);
-    return out.slice(0, maxEntries || 40).join('\n').slice(0, charLimit || 4000);
+    return entries.filter(e => e.enabled !== false && e.content).map(e => e.content).join('\n');
   }
   async function syncCharBinding() {
     const info = getCharFullInfo();
@@ -726,6 +727,29 @@
     }
     return out;
   }
+  // 截断容错:输出被切断(没收尾)时,截到最后一个完整元素边界,再补全未闭合的括号/引号,尽量救回已完整的部分
+  function salvageJson(s) {
+    let inStr = false, escp = false, lastBoundary = -1;
+    for (let idx = 0; idx < s.length; idx++) {
+      const ch = s[idx];
+      if (inStr) { if (escp) escp = false; else if (ch === '\\') escp = true; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === ',' || ch === '}' || ch === ']') lastBoundary = idx + 1;
+    }
+    let cut = (lastBoundary > 0 ? s.slice(0, lastBoundary) : s).replace(/,\s*$/, '');
+    // 重新统计未闭合括号(忽略字符串内的)
+    inStr = false; escp = false; const stack = [];
+    for (let idx = 0; idx < cut.length; idx++) {
+      const ch = cut[idx];
+      if (inStr) { if (escp) escp = false; else if (ch === '\\') escp = true; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') inStr = true;
+      else if (ch === '{' || ch === '[') stack.push(ch === '{' ? '}' : ']');
+      else if (ch === '}' || ch === ']') stack.pop();
+    }
+    if (inStr) cut += '"';
+    for (let z = stack.length - 1; z >= 0; z--) cut += stack[z];
+    return cut;
+  }
   function tryParseJSON(raw, fallback = null) {
     if (!raw) return fallback;
     let s0 = raw.replace(/```json|```/g, '').trim();
@@ -736,9 +760,12 @@
     if (useArr) s = s0.slice(k, l + 1);
     else if (i >= 0 && j > i) s = s0.slice(i, j + 1);
     const noTrail = (x) => x.replace(/,\s*([}\]])/g, '$1'); // 去尾随逗号
-    const attempts = [s, noTrail(s), noTrail(sanitizeJsonStr(s))];
+    // 截断救援:从首个 { 或 [ 开始的原文(不靠 lastIndexOf 收尾),交给 salvageJson 补全
+    const startIdx = (useArr || i < 0) ? k : (k >= 0 && k < i ? k : i);
+    const rawFromStart = startIdx >= 0 ? s0.slice(startIdx) : s0;
+    const attempts = [s, noTrail(s), noTrail(sanitizeJsonStr(s)), salvageJson(rawFromStart), noTrail(sanitizeJsonStr(salvageJson(rawFromStart)))];
     for (const a of attempts) {
-      try { return JSON.parse(a); } catch (e) {}
+      try { const r = JSON.parse(a); if (r && typeof r === 'object') return r; } catch (e) {}
     }
     return fallback;
   }
@@ -1122,7 +1149,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
     toastr.info('正在偷看 ta 的手机…');
     const cname = charDisplayName(d0);
     const role = getRoleDesc() || '';
-    const wb = await getWorldbookContent(4000, 40);
+    const wb = await getWorldbookContent(8000, 60);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」这个人【自己手机里】的私密内容,供上帝视角偷看。一切都【严格基于 ta 的人设、世界书设定、当前主线剧情】,不许 OOC、不许编造跟设定冲突的人和事。
@@ -1162,7 +1189,7 @@ ${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n
     toastr.info('正在看 ta 最近听什么…');
     const cname = charDisplayName(d0);
     const role = getRoleDesc() || '';
-    const wb = await getWorldbookContent(3000, 30);
+    const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」网易云音乐里【最近播放】的歌,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情和【此刻心情】来选歌,不许 OOC。
@@ -1201,7 +1228,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     toastr.info('正在翻 ta 的淘宝…');
     const cname = charDisplayName(d0);
     const role = getRoleDesc() || '';
-    const wb = await getWorldbookContent(3000, 30);
+    const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」淘宝里的内容,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC、不许编造跟设定冲突的东西。买什么要符合 ta 的【身份/经济状况/喜好/当前处境】。
@@ -1246,7 +1273,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     toastr.info('正在查 ta 的支付宝…');
     const cname = charDisplayName(d0);
     const role = getRoleDesc() || '';
-    const wb = await getWorldbookContent(3000, 30);
+    const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」支付宝里的内容,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC。金额要符合 ta 的【身份/经济状况】(明星/总裁和学生差很多)。
@@ -1285,7 +1312,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     toastr.info('正在偷看 ta 的豆包…');
     const cname = charDisplayName(d0);
     const role = getRoleDesc() || '';
-    const wb = await getWorldbookContent(3000, 30);
+    const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
     const sys = `你要生成「${cname}」和「豆包」(一个 AI 助手 app)的一段聊天记录,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC。
@@ -1315,7 +1342,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     toastr.info('正在查 ta 今天拉了没…');
     const cname = charDisplayName(d0);
     const role = getRoleDesc() || '';
-    const wb = await getWorldbookContent(3000, 30);
+    const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const sys = `你要生成「${cname}」手机里【拉屎打卡】app 的内容,供上帝视角偷看。纯搞笑向,但要符合 ta 的人设/身体状况/当前处境(压力大可能便秘、吃辣喝大可能拉肚子、作息乱、出差水土不服 等,和世界书剧情呼应)。可以损可以好笑,但别写得太重口恶心。
 【${cname} 的人设/性格】:\n${role}
@@ -2097,6 +2124,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
           <summary class="xhs-set-title">🎭 出场角色(多人卡)</summary>
           <div class="xhs-set-help">单卡多角色用:登记卡里的几个角色,每个能在微信里单独建一条对话、各用各的人设生成、同步主线时写各自真名。<b>不登记角色的话,一切和原来一样(单 char),互不影响。</b></div>
           <button class="xhs-set-btn" data-action="detect-cast" style="background:#9b6dff">🔍 从角色卡自动识别</button>
+          <button class="xhs-set-btn" data-action="toggle-autocast" style="background:${(() => { try { return getTop().localStorage.getItem('xhs_yuyuan_autocast') === '1'; } catch (e) { return false; } })() ? '#9b6dff' : '#e8e8ee'};color:${(() => { try { return getTop().localStorage.getItem('xhs_yuyuan_autocast') === '1'; } catch (e) { return false; } })() ? '#fff' : '#333'};margin-top:6px" title="开了之后,进新对话第一次打开手机会自动识别一次出场角色(主要角色≥2个才入册,单char不受影响;识别不准可随时改删)">⚡ 进对话自动识别出场角色:${(() => { try { return getTop().localStorage.getItem('xhs_yuyuan_autocast') === '1'; } catch (e) { return false; } })() ? '开' : '关'}</button>
           <button class="xhs-set-btn" data-action="add-cast" style="background:#5aa96b;margin-top:6px">＋ 手动加角色</button>
           ${(d.cast && d.cast.length) ? `<button class="xhs-set-btn" data-action="toggle-lurk-thoughts" style="background:${d.lurkThoughts ? '#9b6dff' : '#e8e8ee'};color:${d.lurkThoughts ? '#fff' : '#333'};margin-top:6px" title="开了之后,潜入粉丝群的角色会冒出'只有你看得到'的心声(上帝视角)">👁 偷听潜伏角色的心声:${d.lurkThoughts ? '开' : '关'}</button>` : ''}
           ${(d.castCandidates && d.castCandidates.length) ? `<div style="margin-top:10px;background:#fff7ed;border:1px solid #ffd9b3;border-radius:10px;padding:10px">
@@ -2790,6 +2818,13 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     return 'TA';
   }
 
+  // user 的人设真名(SillyTavern persona / 角色卡里 {{user}} 的名字 name1),回退到设置里的名字
+  function getUserPersonaName() {
+    try { const ctx = getCtx(); if (ctx && ctx.name1 && String(ctx.name1).trim()) return String(ctx.name1).trim(); } catch (e) {}
+    try { const d = loadData(); if (d.userName && d.userName.trim()) return d.userName.trim(); } catch (e) {}
+    return '我';
+  }
+
   // 平台基调/世界观,拼进生成提示词
   function toneHint(d) {
     return (d && d.platformTone) ? `\n【平台基调/世界观】本平台整体风格、题材、氛围、说话尺度都按下面这个设定来:\n${String(d.platformTone).slice(0, 1500)}\n` : '';
@@ -3056,7 +3091,7 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
   async function refreshFeed() {
     toastr.info('正在生成 10 条帖子…');
     const d0 = loadData();
-    const world = getWorldSetting();
+    const world = (getWorldSetting() || '').slice(0, 3000); // 氛围参考即可,限量避免巨大世界书把提示词撑爆
     // 防重复:把最近已经刷到的帖子标题喂回去,叫它别再出雷同题材/桥段
     const recentTitles = (d0.feed || []).slice(0, 18).map(p => (p.title || '').trim()).filter(Boolean);
     const avoidLine = recentTitles.length ? `\n【⚠别和这些重复】下面是最近【已经刷到过】的帖子,这次生成的【题材、情节、桥段都要和它们明显不同】,别换个标题讲同一件事:\n${recentTitles.map(t => `· ${t}`).join('\n')}\n` : '';
@@ -3182,7 +3217,7 @@ ${xhsNameRule()}${memeHint(d0)}${toneHint(d0) + xhsNpcStyleLine(d0)}${styleHint(
         likes: Math.floor(Math.random() * 9000) + 100,
         comments: tops,
       };
-    });
+    }).filter(p => (p.title && p.title.trim()) || (p.content && p.content.trim()) || (p.coverText && p.coverText.trim()) || (p.chatlog && p.chatlog.length)); // 丢掉截断救援可能留下的空壳帖
     // 保留旧帖子,新帖子放前面,去重,封顶 40 条
     if (!newPosts.length) { toastr.warning('这次没解析出帖子(模型可能没按格式回),再点一次🔄试试'); return; }
     const prev = (d.feed || []);
@@ -3205,16 +3240,17 @@ ${xhsNameRule()}${memeHint(d0)}${toneHint(d0) + xhsNpcStyleLine(d0)}${styleHint(
     const wMax = Math.max((d0.ficWordMax | 0) || 1000, wMin + 200);
     const ficMode = d0.ficChars || 'random';
     const ficPrefsVal = (d0.ficPrefs || '').trim() || (d0.feedPrefs || '').trim();
-    const world = getWorldSetting();
+    const world = (getWorldSetting() || '').slice(0, 3000); // 氛围参考即可,限量避免巨大世界书把提示词撑爆
+    const uReal = getUserPersonaName(); // 同人文用 user 人设真名,不用小红书/微信名
     const ficCharsRule = (ficMode === 'uchar')
-      ? `主角【固定】用「${d0.userName}」和「${getCharName()}」这一对(就当平台上有人在嗑你俩,可第一或第三人称)`
-      : `主角是【一对全新虚构的路人 CP】:必须给他们起【虚构的人名】,跟你的世界书设定、角色卡、主线里的任何人物、以及「${d0.userName}」「${getCharName()}」本人【都完全无关、别影射、别套用他们的关系】。⚠️【就算用日记体/聊天体/书信体这种第一人称】,里面那个「我」也是【虚构角色】(有自己的名字和身份),【绝不是楼主本人、也不是在写楼主自己的恋爱】;聊天体里的 name 用虚构昵称、【别用「${d0.userName}」或「${getCharName()}」】`;
+      ? `主角【固定】用「${uReal}」和「${getCharName()}」这一对(就当小红书上有人在嗑你俩,可第一或第三人称;【两人都用这两个本名/全名来称呼,保持统一】,别给谁换成网名/昵称读着割裂)`
+      : `主角是【一对全新虚构的路人 CP】:必须给他们起【虚构的人名】,跟你的世界书设定、角色卡、主线里的任何人物、以及「${uReal}」「${getCharName()}」本人【都完全无关、别影射、别套用他们的关系】。⚠️【就算用日记体/聊天体/书信体这种第一人称】,里面那个「我」也是【虚构角色】(有自己的名字和身份),【绝不是楼主本人、也不是在写楼主自己的恋爱】;聊天体里的 name 用虚构昵称、【别用「${uReal}」或「${getCharName()}」】`;
     let ucharRoleLine = '';
     if (ficMode === 'uchar') {
       const cr = getRoleDesc(); const ub = (d0.userBio || '').trim(); const parts = [];
       if (cr) parts.push(`「${getCharName()}」的人设/性格/说话习惯(写到 ta 时严格贴合原人设、别 OOC):${cr}`);
-      if (ub) parts.push(`「${d0.userName}」的资料:${ub}`);
-      if (parts.length) ucharRoleLine = `\n【这几篇嗑的是「${d0.userName}」×「${getCharName()}」,按下面真实人设来写、别把人写崩】:\n${parts.join('\n')}\n`;
+      if (ub) parts.push(`「${uReal}」的资料:${ub}`);
+      if (parts.length) ucharRoleLine = `\n【这几篇嗑的是「${uReal}」×「${getCharName()}」,按下面真实人设来写、别把人写崩】:\n${parts.join('\n')}\n`;
     }
     // 梗池避重抽取(和首页共用 ficMemesUsed 记录)
     const pool = (d0.ficMemes || '').split('\n').map(s => s.trim()).filter(Boolean);
@@ -4252,14 +4288,14 @@ ${String(text || '').slice(0, 12000)}`;
       .filter(x => x.name);
   }
   // 从角色卡 + 世界书(禁用条目也读)识别出场角色;条目多时逐条识别,避免一次输出被截断漏人
-  async function detectCast() {
+  async function detectCast(auto) {
     const card = getRoleDesc();
     const { books, entries } = await getWorldbookEntriesRaw();
     const wbChars = entries.reduce((s, e) => s + (e.content || '').length, 0);
     // 诊断:让你直接看到到底读到了什么
     toastr.info(`读到:角色卡 ${card ? card.length : 0} 字 · 世界书 ${books.length} 本 / ${entries.length} 条(${wbChars} 字)。识别中…`);
     if ((!card || card.trim().length < 10) && entries.length === 0) {
-      toastr.warning('角色卡和世界书都没读到内容。多半是这本世界书没绑定到当前角色/对话(去 ST 把它设为角色或聊天的世界书),或条目是空的。');
+      toastr.warning('角色卡和世界书都没读到内容。多半是世界书没绑定到当前角色/对话(去 ST 把它设为角色或聊天的世界书),或条目是空的。');
       return;
     }
     // 拆块:角色卡正文 + 每个世界书条目;再按每批约 12000 字打包,逐批识别(覆盖全部内容,不截断)
@@ -4297,13 +4333,37 @@ ${String(text || '').slice(0, 12000)}`;
       ex.main = ex.main || f.main;
     });
     const cap = [...byName.values()].slice(0, 60);
-    if (!cap.length) { toastr.warning('没识别出角色,可手动添加'); return; }
+    if (!cap.length) { if (auto) toastr.info('自动识别:没识别出角色(世界书可能没绑到这个对话);可手动点「🔍从角色卡自动识别」'); else toastr.warning('没识别出角色,可手动添加'); return; }
     const d = loadData();
-    // 不直接入册:列成候选,让你勾选要哪几个(主要角色默认勾选,配角/NPC 默认不勾)
+    const mainsList = cap.filter(f => f.main);
+    if (auto) {
+      // 自动模式:识别到【≥2 个角色】就算多人卡 → 入册(有判主的加主要的,一个都没判主则全加);不足 2 个当单 char,不动花名册
+      if (cap.length >= 2) {
+        const commitList = mainsList.length >= 1 ? mainsList : cap;
+        d.cast = d.cast || [];
+        let added = 0;
+        commitList.forEach(f => {
+          let cm = d.cast.find(c => c.name === f.name);
+          if (!cm) { cm = { id: uid(), name: f.name, persona: f.persona, avatar: '' }; d.cast.push(cm); added++; }
+          // 入册即建好微信+小红书空对话,私信列表立刻能看到名字(点进去才生成内容)
+          try { castWxDm(d, cm); castXhsDm(d, cm); } catch (e) {}
+        });
+        d.castCandidates = cap.filter(f => !commitList.includes(f)).map(f => ({ name: f.name, persona: f.persona, sel: false }));
+        await saveData(d);
+        refreshXhs();
+        toastr.success(`🎭 自动识别并加入 ${added} 个出场角色${d.castCandidates.length ? `(另有 ${d.castCandidates.length} 个候选可在设置勾)` : ''}。微信/小红书私信列表里已经有 ta 们了,点进去就开始聊。识别不准?去【设置→出场角色】改/删~`, '', { timeOut: 9000 });
+      } else {
+        d.castCandidates = [];
+        await saveData(d);
+        toastr.info(`自动识别:只识别到 ${cap.length} 个角色,按单人卡处理(没入册)。如果这其实是多人卡,多半是世界书没绑到这个对话——可手动点【设置→🎭出场角色→🔍从角色卡自动识别】看看。`, '', { timeOut: 8000 });
+      }
+      return;
+    }
+    // 手动模式:不直接入册,列成候选让你勾选(主要角色默认勾选,配角/NPC 默认不勾)
     d.castCandidates = cap.map(f => ({ name: f.name, persona: f.persona, sel: !!f.main }));
     await saveData(d);
     refreshXhs();
-    const mains = cap.filter(f => f.main).length;
+    const mains = mainsList.length;
     toastr.success(`识别到 ${cap.length} 个候选(其中 ${mains} 个判为主要角色,已默认勾选)。在下面【勾选要加入的】——配角/NPC 不勾就行;读了 ${useBatches.length} 批/${entries.length} 条世界书${truncated ? ',内容超长仅读前 22 批' : ''}`);
   }
   async function toggleCand(idx) {
@@ -4327,8 +4387,10 @@ ${String(text || '').slice(0, 12000)}`;
     let added = 0, updated = 0;
     cands.forEach(f => {
       const ex = d.cast.find(c => c.name === f.name);
-      if (ex) { if (!ex.personaEdited && f.persona && f.persona !== ex.persona) { ex.persona = f.persona; updated++; } return; }
-      d.cast.push({ id: uid(), name: f.name, persona: f.persona, avatar: '' });
+      if (ex) { if (!ex.personaEdited && f.persona && f.persona !== ex.persona) { ex.persona = f.persona; updated++; } try { castWxDm(d, ex); castXhsDm(d, ex); } catch (e) {} return; }
+      const cm = { id: uid(), name: f.name, persona: f.persona, avatar: '' };
+      d.cast.push(cm);
+      try { castWxDm(d, cm); castXhsDm(d, cm); } catch (e) {} // 入册即建空对话,私信列表立刻有名字
       added++;
     });
     d.castCandidates = [];
@@ -5679,7 +5741,7 @@ ${charXhsStyleLine(d)}${role ? `角色设定: ${role}\n` : ''}${cworld ? `世界
         </div>
         <div class="xhs-pub-row">
           <label>${t === 'text' ? '封面大字(会大字显示在彩色卡片上)' : '图片描述(这张图是什么画面,会显示在占位图上)'}</label>
-          <input id="xhs-pub-cover" placeholder="${t === 'text' ? '想大字写的一句话...' : '例如:健身房镜子自拍 / 一桌火锅俯拍'}" maxlength="24"/>
+          <input id="xhs-pub-cover" placeholder="${t === 'text' ? '想大字写的一句话...' : '例如:健身房镜子自拍 / 一桌火锅俯拍(可写详细些,穿搭/场景都行)'}" maxlength="80"/>
         </div>
         <div class="xhs-pub-row">
           <label>正文</label>
@@ -7609,7 +7671,7 @@ ${crole ? `【角色卡/绑定人设】:\n${crole}\n` : ''}${cworld ? `【世界
 
   async function generateNpcProfile(name) {
     toastr.info(`正在进入 ${name} 的主页…`);
-    const world = getWorldSetting();
+    const world = (getWorldSetting() || '').slice(0, 3000); // 氛围参考即可,限量避免巨大世界书把提示词撑爆
     const sys = `你要为小红书用户「${name}」生成一个主页(这是个跟主角剧情无关的路人网友,有自己的生活)。
 ${world ? `(所在世界/城市氛围参考,主角不出现): ${world}\n` : ''}
 生成:
@@ -8254,6 +8316,22 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   }
 
   // ============ 弹层 ============
+  // 打开手机时:若开了「自动识别」且花名册为空且本对话没自动试过 → 后台静默识别一次,主要角色(≥2)自动入册
+  async function maybeAutoDetectCast() {
+    let on = false;
+    try { on = getTop().localStorage.getItem('xhs_yuyuan_autocast') === '1'; } catch (e) {}
+    if (!on) return;
+    const d = loadData();
+    if (d.cast && d.cast.length) return;       // 已有花名册,不动
+    if (d.castAutoTried) return;               // 本对话已自动试过
+    const d1 = loadData(); d1.castAutoTried = true; await saveData(d1);
+    try {
+      toastr.info('🔍 正在自动识别出场角色…', '', { timeOut: 4000 });
+      await detectCast(true);
+    } catch (e) {
+      try { toastr.warning('自动识别出错:' + ((e && e.message) || e)); } catch (_) {}
+    }
+  }
   function openXhs() {
     const TOP = getTop();
     const doc = TOP.document;
@@ -8299,6 +8377,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     updateXhsClock();
     updateXhsBattery();
     try { const lb = doc.getElementById('xhs-float-btn'); if (lb) lb.style.display = 'none'; } catch (e) {}
+    try { maybeAutoDetectCast(); } catch (e) {}
   }
 
   function charmInner(d) {
@@ -8703,6 +8782,23 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'save-settings': await saveSettings(); break;
           case 'sync-char': await syncCharBinding(); break;
           case 'detect-cast': await detectCast(); break;
+          case 'toggle-autocast': {
+            try {
+              const TOP2 = getTop();
+              const on = TOP2.localStorage.getItem('xhs_yuyuan_autocast') === '1';
+              TOP2.localStorage.setItem('xhs_yuyuan_autocast', on ? '0' : '1');
+              if (!on) {
+                const dd = loadData(); dd.castAutoTried = false; await saveData(dd); // 重置标记,允许当前对话现在就识别
+                toastr.success('已开启自动识别,正在识别当前对话…');
+                refreshXhs();
+                await maybeAutoDetectCast();
+              } else {
+                toastr.info('已关闭自动识别');
+                refreshXhs();
+              }
+            } catch (e) {}
+            break;
+          }
           case 'toggle-cand': await toggleCand($btn.data('idx')); break;
           case 'cand-all': await candSetAll(true); break;
           case 'cand-none': await candSetAll(false); break;
@@ -9991,7 +10087,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v328 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v338 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

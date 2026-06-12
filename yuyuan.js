@@ -365,6 +365,27 @@
   }
 
   // ============ 角色卡 + 世界书 ============
+  // 识别专用:读【当前这张卡】的实时内容/名字(读得到就用当前卡,读不到才退回全局绑定)
+  // ——避免"绑定了卡A,在卡B里识别却读到卡A、把卡A的char混进卡B花名册"
+  function getRoleDescLive() {
+    const c = getCharFullInfo();
+    const parts = [];
+    if (c.description) parts.push(c.description);
+    if (c.personality) parts.push('【性格】' + c.personality);
+    if (c.scenario) parts.push('【场景】' + c.scenario);
+    if (c.mes_example) parts.push('【对话示例】' + c.mes_example);
+    const live = parts.join('\n');
+    if (live && live.trim().length > 20) return live;
+    const d = loadData();
+    return (d.charBinding && d.charBinding.content) || live;
+  }
+  function getCharNameLive() {
+    const c = getCharFullInfo();
+    if (c.name && c.name.trim()) return c.name.trim();
+    try { const ctx = getCtx(); if (ctx && ctx.name2 && String(ctx.name2).trim()) return String(ctx.name2).trim(); } catch (e) {}
+    const d = loadData();
+    return (d.charBinding && d.charBinding.name) || 'TA';
+  }
   function getCharFullInfo() {
     try {
       const charData = (typeof getCharData === 'function') ? getCharData() : {};
@@ -1181,9 +1202,11 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
     const wb = await getWorldbookContent(8000, 60);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
+    const upersona = getUserPersonaDesc();
+    const uinfo = [upersona && ('人设:' + upersona), ubio && ('小红书签名:' + ubio)].filter(Boolean).join('\n');
     const sys = `你要生成「${cname}」这个人【自己手机里】的私密内容,供上帝视角偷看。一切都【严格基于 ta 的人设、世界书设定、当前主线剧情】,不许 OOC、不许编造跟设定冲突的人和事。
 【${cname} 的人设/性格】:\n${role}
-${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n` : ''}${ubio ? `【${uname}(机主在意的人)的资料】:${ubio}\n` : ''}
+${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n` : ''}${uinfo ? `【${uname}(机主在意的人/也就是 {{user}} 本人)的人设资料(写到 ta、或 ta 搜跟 ta 相关的事时,星座/生日/喜好都【严格按这个】,别瞎编)】:\n${uinfo}\n` : ''}
 要生成三部分:
 1) wx(微信):ta 和【世界书里其他 NPC】的私聊。按【ta 和每个 NPC 各自的人设、以及世界书设定】来写,贴合设定和当前剧情。给 3~6 个联系人(家人/朋友/同事/老板/暧昧对象/前任等——看世界书和人设里【真实存在】谁,别硬编)。【极其重要:绝对不要生成跟「${uname}」(也就是 {{user}} 机主本人,别名都算)的对话!ta 和 ${uname} 的聊天已经单独显示在「你们的聊天」里了,这里【只放 ta 跟除 ${uname} 以外的其他人】的私聊,严禁出现名字是 ${uname} 或其别名的联系人。】每人 2~6 条来回。视角是 ta 的手机:ta 自己发的标 "ta",对方标 "them"。每个联系人再给 time:你俩【最后说话的时间标签】(像"刚刚""昨天 22:10""周二""3天前"),不同联系人时间【各不相同】(有的刚聊、有的很久没聊),像真实微信列表。要透出潜台词(ta 私下怎么评价 ${uname}、ta 的秘密、ta 真实的状态情绪),但不许跟人设剧情冲突。
 2) notes(备忘录):ta 的待办事项,以及 ta 自己的事/碎碎念/计划/灵感(都按 ta 的人设来写,贴合剧情)。
@@ -1221,8 +1244,10 @@ ${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n
     const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
+    const upersona = getUserPersonaDesc();
+    const uinfo = [upersona && ('人设:' + upersona), ubio && ('小红书签名:' + ubio)].filter(Boolean).join('\n');
     const sys = `你要生成「${cname}」网易云音乐里【最近播放】的歌,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情和【此刻心情】来选歌,不许 OOC。
-【${cname} 的人设/性格】:\n${role}${ubio ? `\n【${uname}(机主在乎/在意的人)的资料,写到 ta 时要贴合】:${ubio}` : ''}
+【${cname} 的人设/性格】:\n${role}${uinfo ? `\n【${uname}(机主在乎/在意的人,也就是 {{user}} 本人)的人设资料,写到 ta 时严格贴合(星座/生日/喜好按这个、别瞎编)】:\n${uinfo}` : ''}
 ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
 要求:
 - 选【最多 6 首】歌,符合 ta 的【真实音乐品味(看人设:年龄、性格、职业、文化背景)】和【当前心情/处境】。歌单是 ta 内心的投射:外表冷静的人可能在反复循环很丧/很烫的歌。
@@ -1260,8 +1285,10 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
+    const upersona = getUserPersonaDesc();
+    const uinfo = [upersona && ('人设:' + upersona), ubio && ('小红书签名:' + ubio)].filter(Boolean).join('\n');
     const sys = `你要生成「${cname}」淘宝里的内容,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC、不许编造跟设定冲突的东西。买什么要符合 ta 的【身份/经济状况/喜好/当前处境】。
-【${cname} 的人设/性格】:\n${role}${ubio ? `\n【${uname}(机主在乎/在意的人)的资料,写到 ta 时要贴合】:${ubio}` : ''}
+【${cname} 的人设/性格】:\n${role}${uinfo ? `\n【${uname}(机主在乎/在意的人,也就是 {{user}} 本人)的人设资料,写到 ta 时严格贴合(星座/生日/喜好按这个、别瞎编)】:\n${uinfo}` : ''}
 ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
 要生成:
 - vip:ta 的会员等级(如"88VIP""超级会员",或留空,看人设)。
@@ -1305,8 +1332,10 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
+    const upersona = getUserPersonaDesc();
+    const uinfo = [upersona && ('人设:' + upersona), ubio && ('小红书签名:' + ubio)].filter(Boolean).join('\n');
     const sys = `你要生成「${cname}」支付宝里的内容,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC。金额要符合 ta 的【身份/经济状况】(明星/总裁和学生差很多)。
-【${cname} 的人设/性格】:\n${role}${ubio ? `\n【${uname}(机主在乎/在意的人)的资料,写到 ta 时要贴合】:${ubio}` : ''}
+【${cname} 的人设/性格】:\n${role}${uinfo ? `\n【${uname}(机主在乎/在意的人,也就是 {{user}} 本人)的人设资料,写到 ta 时严格贴合(星座/生日/喜好按这个、别瞎编)】:\n${uinfo}` : ''}
 ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
 要生成:
 - balance:零钱余额(数字)。
@@ -1344,8 +1373,10 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     const wb = await getWorldbookContent(6000, 50);
     const uname = d0.userName || '我';
     const ubio = (d0.userBio || '').trim();
+    const upersona = getUserPersonaDesc();
+    const uinfo = [upersona && ('人设:' + upersona), ubio && ('小红书签名:' + ubio)].filter(Boolean).join('\n');
     const sys = `你要生成「${cname}」和「豆包」(一个 AI 助手 app)的一段聊天记录,供上帝视角偷看。严格基于 ta 的人设、世界书设定、当前主线剧情,不许 OOC。
-【${cname} 的人设/性格】:\n${role}${ubio ? `\n【${uname}(机主在乎/在意的人)的资料,写到 ta 时要贴合】:${ubio}` : ''}
+【${cname} 的人设/性格】:\n${role}${uinfo ? `\n【${uname}(机主在乎/在意的人,也就是 {{user}} 本人)的人设资料,写到 ta 时严格贴合(星座/生日/喜好按这个、别瞎编)】:\n${uinfo}` : ''}
 ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
 生成 4 条消息,顺序严格是:① ${cname} 先抛出【一件事】——可以是一个生活问题,或者倾诉一桩烦心事/纠结/情绪(符合人设和当前剧情,是 ta 私下才会跟 AI 念叨的那种,可搞笑、可暴露 ta 的小情绪/小秘密、可和 ${uname} 有关);② 豆包回复;③ ${cname}【顺着豆包刚才的回复往下接】——是对豆包那番话的反应(吐槽、无语、将信将疑、被绕得更懵、或者反驳),**不是再问一个新问题**;④ 豆包再回复一次。
 豆包的语气要【非常"豆包"】:极度热情、体贴到用力过猛、特爱拍胸脯打包票,满嘴排比和夸张承诺还爱加 emoji,就这个味儿——"我相信你,你一定能搞定""别怕,我陪着你,我一直都在""我帮你把这事儿拆解得明明白白,不焦虑、不踩坑👇""我给你最直接、最真相、最不绕弯、最一针见血的结论""绝对精准、不忽悠""有我给你兜底,放心去做吧"。
@@ -2847,6 +2878,21 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     return 'TA';
   }
 
+  // user 的【人设描述】(SillyTavern persona description,{{persona}} 宏展开;星座/生日/喜好等通常写在这)。多通道兜底,取不到回空。
+  function getUserPersonaDesc() {
+    try {
+      const ctx = getCtx();
+      if (!ctx) return '';
+      if (typeof ctx.substituteParams === 'function') {
+        try { const p = ctx.substituteParams('{{persona}}'); if (p && String(p).trim() && !String(p).includes('{{persona}}')) return String(p).trim(); } catch (e) {}
+      }
+      if (typeof ctx.getCharacterCardFields === 'function') {
+        try { const f = ctx.getCharacterCardFields(); const p = f && (f.persona || (f.user && f.user.persona)); if (p && String(p).trim()) return String(p).trim(); } catch (e) {}
+      }
+      try { const pu = getTop().power_user; if (pu && pu.persona_description && String(pu.persona_description).trim()) return String(pu.persona_description).trim(); } catch (e) {}
+    } catch (e) {}
+    return '';
+  }
   // user 的人设真名(SillyTavern persona / 角色卡里 {{user}} 的名字 name1),回退到设置里的名字
   function getUserPersonaName() {
     try { const ctx = getCtx(); if (ctx && ctx.name1 && String(ctx.name1).trim()) return String(ctx.name1).trim(); } catch (e) {}
@@ -4316,9 +4362,11 @@ ${numbered}
   }
   // 把一段设定文本里的角色抠出来 → [{name,persona}]
   async function detectCastFromText(label, text) {
+    const _knownChar = getCharNameLive(); // 实时读当前卡名字,别读到绑定的别张卡
     const sys = `下面是一段"单卡多角色"的角色设定文本(出处:${label})。请挑出其中的【可对话角色】,每个给:name(角色名)+ persona(人设)+ main(是否主要角色)。
-- 【persona 要忠于原文、别概括】:把原文里关于该角色写到的设定【尽量完整保留】——性格、身份/背景、说话风格、与主角的关系、关键经历/特征等,照原文措辞与细节整理,不要压缩成一句、不要改写或脑补。
+${_knownChar && _knownChar !== 'TA' ? `【已知】这张卡的核心主角(也就是 {{char}} 本人)是「${_knownChar}」。判 main 时以 ta 为锚:如果其余角色都是【围绕「${_knownChar}」的队友/对手/配角/NPC】,那这就是【单人卡】,【只给「${_knownChar}」一个 main=true】、其余全 false。\n` : ''}- 【persona 要忠于原文、别概括】:把原文里关于该角色写到的设定【尽量完整保留】——性格、身份/背景、说话风格、与主角的关系、关键经历/特征等,照原文措辞与细节整理,不要压缩成一句、不要改写或脑补。
 - 【main 字段】:ta 是不是【主要 / 核心角色】?——主角团、主线常出场、可攻略/恋爱对象、戏份重的 → main=true;【配角 / 背景 NPC】(教练、经纪人、解说、粉丝、路人、家人、同事、只被提到一两句没展开的人)→ main=false。拿不准就 false。
+⚠️【最重要·别误判】很多卡其实是【单主角卡】:只有 1 个核心主角(就是 {{char}} 本人),其余全是围绕 ta 的配角/NPC。遇到这种,【只给那 1 个主角 main=true】,其余统统 main=false——【绝对不要】为了凑数把配角/NPC 也标成主要。只有当这张卡【确实是团体卡/群像卡、有 2 个或以上【并列的】核心主角(多个并列男女主/可攻略对象)】时,才给多个 main=true。
 - 【只挑真正的人物角色】:别把世界观名词、地名、组织、势力、物品、功法、术语当角色。
 - 同一人若有本名/昵称/称号,合并成一个,用最常用的名字。
 只输出严格 JSON,不要解释、不要 markdown: {"cast":[{"name":"角色名","persona":"忠于原文的完整人设","main":true或false}]}
@@ -4332,13 +4380,13 @@ ${String(text || '').slice(0, 12000)}`;
   }
   // 从角色卡 + 世界书(禁用条目也读)识别出场角色;条目多时逐条识别,避免一次输出被截断漏人
   async function detectCast(auto) {
-    const card = getRoleDesc();
+    const card = getRoleDescLive(); // 实时读当前卡内容,避免绑定的别张卡混进识别
     const { books, entries } = await getWorldbookEntriesRaw();
     const wbChars = entries.reduce((s, e) => s + (e.content || '').length, 0);
     // 诊断:让你直接看到到底读到了什么
-    toastr.info(`读到:角色卡 ${card ? card.length : 0} 字 · 世界书 ${books.length} 本 / ${entries.length} 条(${wbChars} 字)。识别中…`);
+    if (!auto) toastr.info(`读到:角色卡 ${card ? card.length : 0} 字 · 世界书 ${books.length} 本 / ${entries.length} 条(${wbChars} 字)。识别中…`);
     if ((!card || card.trim().length < 10) && entries.length === 0) {
-      toastr.warning('角色卡和世界书都没读到内容。多半是世界书没绑定到当前角色/对话(去 ST 把它设为角色或聊天的世界书),或条目是空的。');
+      if (!auto) toastr.warning('角色卡和世界书都没读到内容。多半是世界书没绑定到当前角色/对话(去 ST 把它设为角色或聊天的世界书),或条目是空的。');
       return;
     }
     // 拆块:角色卡正文 + 每个世界书条目;再按每批约 12000 字打包,逐批识别(覆盖全部内容,不截断)
@@ -4348,7 +4396,7 @@ ${String(text || '').slice(0, 12000)}`;
       const t = (e.content || '').trim();
       if (t.length >= 10) pieces.push(`【世界书条目「${e.name || ('#' + (i + 1))}」】\n${e.content}`);
     });
-    if (!pieces.length) { toastr.warning('读到的世界书条目都是空的,可手动添加角色'); return; }
+    if (!pieces.length) { if (!auto) toastr.warning('读到的世界书条目都是空的,可手动添加角色'); return; }
     const BATCH = 7000, MAX_BATCHES = 22;
     const batches = [];
     let cur = '';
@@ -4360,7 +4408,7 @@ ${String(text || '').slice(0, 12000)}`;
     if (cur) batches.push(cur);
     const useBatches = batches.slice(0, MAX_BATCHES);
     const truncated = batches.length > MAX_BATCHES;
-    toastr.info(`内容较多,分 ${useBatches.length} 批识别中(每批约 7 千字,稍等)…`);
+    if (!auto) toastr.info(`内容较多,分 ${useBatches.length} 批识别中(每批约 7 千字,稍等)…`);
     let found = [];
     for (let i = 0; i < useBatches.length; i++) {
       const r = await detectCastFromText(`第 ${i + 1}/${useBatches.length} 批设定`, useBatches[i]);
@@ -4376,29 +4424,38 @@ ${String(text || '').slice(0, 12000)}`;
       ex.main = ex.main || f.main;
     });
     const cap = [...byName.values()].slice(0, 60);
-    if (!cap.length) { if (auto) toastr.info('自动识别:没识别出角色(世界书可能没绑到这个对话);可手动点「🔍从角色卡自动识别」'); else toastr.warning('没识别出角色,可手动添加'); return; }
+    if (!cap.length) { if (!auto) toastr.warning('没识别出角色,可手动添加'); return; }
     const d = loadData();
     const mainsList = cap.filter(f => f.main);
     if (auto) {
-      // 自动模式:识别到【≥2 个角色】就算多人卡 → 入册(有判主的加主要的,一个都没判主则全加);不足 2 个当单 char,不动花名册
-      if (cap.length >= 2) {
-        const commitList = mainsList.length >= 1 ? mainsList : cap;
-        d.cast = d.cast || [];
-        let added = 0;
-        commitList.forEach(f => {
-          let cm = d.cast.find(c => c.name === f.name);
-          if (!cm) { cm = { id: uid(), name: f.name, persona: f.persona, avatar: '' }; d.cast.push(cm); added++; }
-          // 入册即建好微信+小红书空对话,私信列表立刻能看到名字(点进去才生成内容)
-          try { castWxDm(d, cm); castXhsDm(d, cm); } catch (e) {}
-        });
-        d.castCandidates = cap.filter(f => !commitList.includes(f)).map(f => ({ name: f.name, persona: f.persona, sel: false }));
-        await saveData(d);
-        refreshXhs();
-        toastr.success(`🎭 自动识别并加入 ${added} 个出场角色${d.castCandidates.length ? `(另有 ${d.castCandidates.length} 个候选可在设置勾)` : ''}。微信/小红书私信列表里已经有 ta 们了,点进去就开始聊。识别不准?去【设置→出场角色】改/删~`, '', { timeOut: 9000 });
+      // 自动模式:识别到 ≥2 个"主要角色"时【先弹确认】,由你拍板是不是多人卡——
+      // 因为单人卡里写得丰满的队友/配角也常被模型判成"主要",纯自动会误判、锁掉查手机。
+      if (mainsList.length >= 2) {
+        const names = mainsList.map(f => f.name).join('、');
+        const TOP = getTop();
+        let ok = false;
+        try { ok = TOP.confirm(`检测到这张卡可能是【多人卡】,主要角色:\n${names}\n\n要把 ta 们登记成「出场角色」吗?\n\n· 确定 = 登记(真·多人卡/群像卡选这个)\n· 取消 = 这是单人卡,不登记(保留「查手机」功能)`); } catch (e) { ok = false; }
+        if (ok) {
+          d.cast = d.cast || [];
+          let added = 0;
+          mainsList.forEach(f => {
+            let cm = d.cast.find(c => c.name === f.name);
+            if (!cm) { cm = { id: uid(), name: f.name, persona: f.persona, avatar: '' }; d.cast.push(cm); added++; }
+            try { castWxDm(d, cm); castXhsDm(d, cm); } catch (e) {}
+          });
+          d.castCandidates = [];
+          await saveData(d);
+          refreshXhs();
+          toastr.success(`🎭 已登记 ${added} 个出场角色。微信/小红书私信列表里已经有 ta 们了,点进去就开始聊。配角/NPC 没自动加,想要去【设置→🎭出场角色】手动加~`, '', { timeOut: 9000 });
+        } else {
+          // 你说是单人卡 → 啥也不动,保持单人卡(castAutoTried 已置 true,这个对话不再问)
+          d.castCandidates = [];
+          await saveData(d);
+        }
       } else {
+        // ≤1 个主要角色 → 当单人卡,不动花名册
         d.castCandidates = [];
         await saveData(d);
-        toastr.info(`自动识别:只识别到 ${cap.length} 个角色,按单人卡处理(没入册)。如果这其实是多人卡,多半是世界书没绑到这个对话——可手动点【设置→🎭出场角色→🔍从角色卡自动识别】看看。`, '', { timeOut: 8000 });
       }
       return;
     }
@@ -8380,7 +8437,6 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     if (d.castAutoTried) return;               // 本对话已自动试过
     const d1 = loadData(); d1.castAutoTried = true; await saveData(d1);
     try {
-      toastr.info('🔍 正在自动识别出场角色…', '', { timeOut: 4000 });
       await detectCast(true);
     } catch (e) {
       try { toastr.warning('自动识别出错:' + ((e && e.message) || e)); } catch (_) {}
@@ -10141,7 +10197,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v341 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v345 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

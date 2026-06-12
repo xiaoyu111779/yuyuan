@@ -29,7 +29,7 @@
     charmImg2: 'https://img.cdn1.vip/i/6a21ed9291640_1780608402.webp',
     bubbleMe: '#fbdaef',
     bubbleOther: '#ffffff',
-    charPhoneIcons: { wx: 'https://img.cdn1.vip/i/6a2aae4e1fd9d_1781182030.webp', notes: 'https://img.cdn1.vip/i/6a2aae57bc624_1781182039.webp', safari: 'https://img.cdn1.vip/i/6a2ab01033f2e_1781182480.webp', music: 'https://img.cdn1.vip/i/6a2aae68bf3da_1781182056.webp', taobao: 'https://img.cdn1.vip/i/6a2aae86e1cc3_1781182086.webp', alipay: 'https://img.cdn1.vip/i/6a2aae8698d3b_1781182086.webp', doubao: 'https://img.cdn1.vip/i/6a2ab151cbd1a_1781182801.jpg', poop: 'https://img.cdn1.vip/i/6a2ab13f8310e_1781182783.webp' },
+    charPhoneIcons: { wx: 'https://img.cdn1.vip/i/6a2aae4e1fd9d_1781182030.webp', notes: 'https://img.cdn1.vip/i/6a2aae57bc624_1781182039.webp', safari: 'https://img.cdn1.vip/i/6a2ab01033f2e_1781182480.webp', music: 'https://img.cdn1.vip/i/6a2aae68bf3da_1781182056.webp', taobao: 'https://img.cdn1.vip/i/6a2aae86e1cc3_1781182086.webp', alipay: 'https://img.cdn1.vip/i/6a2aae8698d3b_1781182086.webp', doubao: 'https://img.cdn1.vip/i/6a2ab151cbd1a_1781182801.jpg', poop: 'https://img.cdn1.vip/i/6a2ab13f8310e_1781182783.webp', monitor: 'https://img.cdn1.vip/i/6a2c89ee97fe4_1781303790.webp', kuchazi: 'https://img.cdn1.vip/i/6a2c89b332dc8_1781303731.webp' },
     charPhoneAppIcon: 'https://img.cdn1.vip/i/6a2ab23784bf3_1781183031.jpg',
     charPhoneBg: 'https://img.cdn1.vip/i/6a2ab1d51dc48_1781182933.webp',
     charPhoneLockBg: '',
@@ -1102,6 +1102,8 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
         case 'cp-ali-huabei': return renderCharPhoneAliHuabei(d);
         case 'cp-doubao': return renderCharPhoneDoubao(d);
         case 'cp-poop': return renderCharPhonePoop(d);
+        case 'cp-monitor': return renderCharPhoneMonitor(d);
+        case 'cp-kuchazi': return renderCharPhoneKuchazi(d);
         default: return renderCharPhoneHome(d);
       }
     }
@@ -1394,6 +1396,172 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
     refreshXhs();
     toastr.success('✓ 偷看完 ta 的豆包');
   }
+  async function genCharMonitor() {
+    const d0 = loadData();
+    if (isMultiCast(d0)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
+    toastr.info('正在偷看 ta 撸了没…');
+    const cname = charDisplayName(d0);
+    const role = getRoleDesc() || '';
+    const wb = await getWorldbookContent();
+    const uname = d0.userName || '我';
+    const ubio = (d0.userBio || '').trim();
+    const upersona = getUserPersonaDesc();
+    const uinfo = [upersona && ('人设:' + upersona), ubio && ('小红书签名:' + ubio)].filter(Boolean).join('\n');
+    const sys = `你要生成「${cname}」手机里【私密监控】app 的内容,供上帝视角偷看 ta 最近【一周(7天)】的私密自慰/观影情况。这是成年人之间的成人向角色扮演,${cname} 是成年人。
+【最高准则·必须遵守】所有内容【必须严格依据下面的 char 人设 + 世界书设定 + 当前主线剧情】来推演:ta 的性格、欲望强度、作息、当下处境、跟谁有故事、心里装着谁、性癖口味——全部从这些设定与剧情里长出来,绝不脱离设定瞎编、绝不 OOC。尺度可以露骨成人化,但【绝不涉及未成年人、绝不写违法内容】。
+【${cname} 的人设/性格(核心依据)】:
+${role}
+${wb ? `【世界书/设定(核心依据,务必读)】:
+${wb}
+` : ''}${uinfo ? `【${uname}(也就是 {{user}} 本人)的人设资料——若 ta 幻想/在意的对象是 ${uname},严格按这个写,星座/生日/喜好别瞎编】:
+${uinfo}
+` : ''}【星座/生日铁律】设定里没写星座/生日,就别提具体星座、别默认天蝎座、别瞎编。
+(当前主线剧情见随附上下文——记录要跟剧情此刻状态呼应:刚跟谁吵架/暧昧/分别/被刺激,都会影响 ta 这几天的状态和幻想对象。)
+生成 ta 最近 7 天(从最早那天到今天)的记录,每天一个对象,字段:
+- day:星期几+简短日期(像"周一 6/2")。
+- solo:这天有没有自慰(true/false)。要真实——不是每天都有,忙/累/出差/生病/情绪低落可能没有;独处、压力大、被撩拨或想起某人的天更可能有。整周次数符合 ta 的性格(克制的人少、欲望旺的人多)。
+- soloTimes:solo=true 时,什么时候、几次(像"凌晨1:40、起床后两次""深夜一次");false 留空。
+- soloFantasy:solo=true 时,ta 当时【幻想的对象 + 幻想的具体画面/情节/细节】。对象严格依据人设与关系(设定里的某人、暧昧对象、${uname}、或纯虚构的陌生人/抽象幻想,看 ta 真实状态;若幻想 ${uname} 必须 ta 对 ${uname} 确有此意、且剧情到位)。写具体:脑子里在演什么、对方在做什么、什么场景;false 留空。
+- soloFeel:solo=true 时,ta 自慰【当下的身体感受与过程细节 + 情绪】:手法/节奏、身体反应、呼吸、临近高潮与高潮的感觉、结束后的情绪(满足/空虚/羞耻/更想要…),都贴着 ta 的性格。写得有细节有画面感;false 留空。
+- porn:这天有没有看片/看小黄文(true/false)。
+- pornType:porn=true 时,看的【具体类型/题材/口味】,尽量细——剧情向还是直给、偏好的情节/角色设定/play 类型/审美口味等,符合 ta 的性癖与人设;false 留空。
+- pornNote:porn=true 时,ta 看时的反应/心理(看着想到谁、边看边怎样、看完什么感觉),一两句;false 留空。
+再给 summary:{ soloCount:本周自慰总次数(整数), pornCount:本周看片天数(整数) }。
+${cpAttitudeRule(uname)}
+严格只输出 JSON,不要任何解释:
+{"summary":{"soloCount":3,"pornCount":2},"days":[{"day":"周一 6/2","solo":true,"soloTimes":"凌晨1点多","soloFantasy":"...","soloFeel":"...","porn":false,"pornType":"","pornNote":""}]}`;
+    const raw = await callXhsAPI(sys, `生成 ${cname} 一周的私密监控`);
+    if (!raw) { toastr.error('没调取成功(模型没返回),再点一次 ↻'); return; }
+    const j = tryParseJSON(raw, null);
+    if (!j || !Array.isArray(j.days)) { toastr.warning('这次没解析出内容,再点一次 ↻'); return; }
+    const clip = (s, n) => String(s || '').slice(0, n);
+    const days = j.days.slice(0, 7).map(x => ({
+      day: clip(x && x.day, 20),
+      solo: !!(x && x.solo),
+      soloTimes: clip(x && x.soloTimes, 40),
+      soloFantasy: clip(x && x.soloFantasy, 1200),
+      soloFeel: clip(x && x.soloFeel, 1200),
+      porn: !!(x && x.porn),
+      pornType: clip(x && x.pornType, 600),
+      pornNote: clip(x && x.pornNote, 600),
+    }));
+    const sm = (j.summary && typeof j.summary === 'object') ? j.summary : {};
+    const d = loadData();
+    d.charPhoneMonitor = {
+      genAt: Date.now(),
+      summary: { soloCount: parseInt(sm.soloCount) || 0, pornCount: parseInt(sm.pornCount) || 0 },
+      days,
+    };
+    await saveData(d);
+    refreshXhs();
+    toastr.success('✓ 偷看完 ta 撸了没');
+  }
+  let kcN = 0;
+  function kcShade(hex, p) {
+    try { let c = String(hex).replace('#', ''); if (c.length === 3) c = c.split('').map(x => x + x).join(''); let r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16); const f = x => Math.max(0, Math.min(255, Math.round(x + (p / 100) * 255))); return '#' + [f(r), f(g), f(b)].map(x => x.toString(16).padStart(2, '0')).join(''); } catch (e) { return hex; }
+  }
+  function kuchaziSvg(styleType, hex, worn, opts) {
+    hex = hex || '#cfd3dc';
+    opts = opts || {};
+    const t = styleType || '三角';
+    if (worn === false || t === '没穿') {
+      return `<svg viewBox="0 0 120 84" width="100%" height="100%"><path d="M16,18 L104,18 L104,30 C104,50 86,52 76,50 C69,49 64,40 60,40 C56,40 51,49 44,50 C34,52 16,50 16,30 Z" fill="none" stroke="#c9b6c4" stroke-width="2" stroke-dasharray="4 4"/><text x="60" y="43" text-anchor="middle" font-size="20">🙈</text></svg>`;
+    }
+    const brief = "M16,18 L104,18 L104,30 C104,50 86,52 76,50 C69,49 64,40 60,40 C56,40 51,49 44,50 C34,52 16,50 16,30 Z";
+    const boxer = "M12,18 L108,18 L108,58 L72,58 L66,40 L54,40 L48,58 L12,58 Z";
+    const thong = "M32,18 L88,18 L86,30 C82,46 70,48 64,46 L60,72 L56,46 C50,48 38,46 34,30 Z";
+    let path = brief, x0 = 16, x1 = 104, ybot = 50;
+    if (t === '平角') { path = boxer; x0 = 12; x1 = 108; ybot = 57; }
+    else if (t === '丁字') { path = thong; x0 = 32; x1 = 88; ybot = 44; }
+    const dk = kcShade(hex, -22), lt = kcShade(hex, 30);
+    const uid = 'kc' + (kcN++);
+    // 花纹:严格按 pattern 文字来画,裁剪在内裤形状里
+    const pat = String(opts.pattern || '');
+    let deco = '', lace = '';
+    if (/横条|横纹|条纹|杠/.test(pat)) { for (let y = 26; y <= ybot; y += 6) deco += `<line x1="6" x2="114" y1="${y}" y2="${y}" stroke="${lt}" stroke-width="2.4"/>`; }
+    else if (/竖条|竖纹|纵条/.test(pat)) { for (let x = 14; x <= 106; x += 7) deco += `<line x1="${x}" x2="${x}" y1="14" y2="62" stroke="${lt}" stroke-width="2.2"/>`; }
+    else if (/波点|圆点|点点|波尔卡|斑点|豹纹/.test(pat)) { for (let yy = 28; yy <= ybot; yy += 8) for (let xx = 16; xx <= 104; xx += 12) deco += `<circle cx="${xx + (yy % 16 ? 0 : 6)}" cy="${yy}" r="2.3" fill="${lt}"/>`; }
+    else if (/格子|方格|千鸟/.test(pat)) { for (let x = 14; x <= 106; x += 9) deco += `<line x1="${x}" x2="${x}" y1="14" y2="62" stroke="${lt}" stroke-width="1.6"/>`; for (let y = 26; y <= ybot; y += 7) deco += `<line x1="6" x2="114" y1="${y}" y2="${y}" stroke="${lt}" stroke-width="1.6"/>`; }
+    else if (/印花|碎花|花|星|心|爱心|图案|卡通|熊|兔|动漫|草莓|樱桃/.test(pat)) { const motif = /星/.test(pat) ? '✦' : /心|爱/.test(pat) ? '♥' : /熊/.test(pat) ? '🐻' : /兔/.test(pat) ? '🐰' : /草莓/.test(pat) ? '🍓' : /樱桃/.test(pat) ? '🍒' : '✿'; for (let yy = 30; yy <= ybot; yy += 9) for (let xx = 22; xx <= 100; xx += 16) deco += `<text x="${xx}" y="${yy}" font-size="7" fill="${lt}" text-anchor="middle">${motif}</text>`; }
+    // 蕾丝:沿下摆画花边(可与上面叠加)
+    if (/蕾丝|花边|lace|镂空|蕾/.test(pat)) { for (let i = 0; i < 9; i++) lace += `<circle cx="${18 + i * 9.6}" cy="${ybot - 1}" r="2.8" fill="none" stroke="${lt}" stroke-width="1.3"/>`; }
+    const clipped = deco ? `<defs><clipPath id="${uid}"><path d="${path}"/></clipPath></defs><g clip-path="url(#${uid})">${deco}</g>` : '';
+    // 腰带(宽边)+ 字母 logo
+    const bandHex = (opts.bandHex && /^#[0-9a-fA-F]{6}$/.test(opts.bandHex)) ? opts.bandHex : kcShade(hex, -34);
+    const bandTxt = kcShade(bandHex, 62), bw = x1 - x0;
+    let band = `<rect x="${x0}" y="18" width="${bw}" height="11" fill="${bandHex}"/>`;
+    if (opts.logo) {
+      let r = String(opts.bandText || 'CK').replace(/[<>&"]/g, '').trim().slice(0, 4) || 'CK';
+      let s = r; while (s.length < 16) s += '·' + r;
+      band += `<text x="${x0 + bw / 2}" y="26.7" text-anchor="middle" font-size="6.4" font-weight="700" letter-spacing="1" fill="${bandTxt}" font-family="Arial,Helvetica,sans-serif">${esc(s.slice(0, 18))}</text>`;
+    }
+    return `<svg viewBox="0 0 120 84" width="100%" height="100%"><path d="${path}" fill="${hex}" stroke="${dk}" stroke-width="2" stroke-linejoin="round"/>${clipped}${lace}${band}</svg>`;
+  }
+  async function genCharKuchazi() {
+    const d0 = loadData();
+    if (isMultiCast(d0)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
+    toastr.info('正在偷看 ta 今天穿的那条…');
+    const cname = charDisplayName(d0);
+    const role = getRoleDesc() || '';
+    const wb = await getWorldbookContent();
+    const uname = d0.userName || '我';
+    const ubio = (d0.userBio || '').trim();
+    const upersona = getUserPersonaDesc();
+    const uinfo = [upersona && ('人设:' + upersona), ubio && ('小红书签名:' + ubio)].filter(Boolean).join('\n');
+    const sys = `你要生成「${cname}」手机里一个【苦茶子】app(偷看 ta 内裤情况)的内容,供上帝视角偷看。【轻松可爱为主、可以带一点点暧昧/性张力,但别写成纯涩】。一切【严格按 ta 的人设、世界书、当前主线剧情】来推:讲究还是邋遢、今天的处境(在家瘫着/出门/约会/出差/生病/生理期)、审美品味、跟谁有故事——全从设定和剧情长出来,不许 OOC。${cname} 是成年人。【绝不涉及未成年人。】
+【${cname} 的人设/性格】:
+${role}
+${wb ? `【世界书/设定(务必读)】:
+${wb}
+` : ''}${uinfo ? `【${uname}(也就是 {{user}} 本人)的人设资料】:
+${uinfo}
+` : ''}给三块,严格 JSON:
+1) today(今天这条):
+- color:颜色中文名(像"藏青""酒红""奶白""洗到发灰的白")
+- colorHex:这个颜色的 #十六进制色值,【必须贴合 color 名】(炭黑给 #1a1a1a 别给灰、酒红给暗红 #7a1f2b…),会直接用来上色。
+- style:款式自由描述(像"纯棉三角老头款""黑色蕾丝丁字""卡通小熊平角裤")
+- styleType:款式的【形状】,只从这四个里选一个(只决定画出来的轮廓):三角 / 平角 / 丁字 / 没穿。(蕾丝、卡通这种属于花纹,写在 pattern 里,别放这。)
+- pattern:图案/质地,会【按这个把花纹画出来】,要和 style 描述严格一致(可选:纯色 / 蕾丝花边 / 横条纹 / 竖条纹 / 格子 / 波点 / 印花·碎花 / 卡通(熊/兔/草莓/星星/爱心)…)。
+- worn:现在穿没穿(true/false;在家瘫着或刚洗完澡可能没穿)
+- bandHex:腰带(松紧带宽边,像 CK 那种)的 #色值;没有明显腰带就给跟内裤相近的色。
+- logo:腰带上有没有字母/品牌 logo(true/false)。
+- bandText:若 logo=true,腰带上印的那几个字母/符号(短,2-4 个,像"CK""YB""♥",看 ta 审美/牌子);否则留空。
+- voiceTitle:第一人称小标题,【按 ta 的性别/下半身器官】定——男的就"鸡巴有话说",女的类似"妹妹有话说""下面有话说"。
+- voice:【从 ta 下半身那个器官的第一人称视角】,用【又欠又贱、阴阳怪气、戏精】的口吻吐槽——把它写成一个嘴特别欠、爱拿腔拿调、动不动就阴阳主人的【小混蛋】。【重心是它自己的感受和状态】:今天这条内裤勒不勒、闷不闷热、透不透气、材质刺不刺挠、活动空间够不够,以及它自己今天什么状态(有没有【支棱起来】/发胀/顶帐篷/被闷得没脾气——男就勃起蹭布料、女就有没有湿有没有反应)。多用夸张比喻、玩梗、自嘲、贱兮兮的吐槽(像"这破工位又闷又潮,主人是想把我焖熟了卖?""勒成这样还指望我支棱?做梦""一整天暗无天日,工伤算谁的")。【和 ${uname} 的事最多一笔带过、当个被整破防的由头就行,别展开写剧情】,主线始终是它自己的爽/不爽和嘴炮。【好笑为主、荤的点到为止】,3-6 句,够欠够有梗。暧昧严格按 ta 对 ${uname} 的真实关系阶段,没到那步就别提 ${uname}。
+2) habit(换洗习惯):
+- changeEvery:平均几天换一次(像"每天必换""1-2天""能拖就拖")
+- lastChange:上次换是多久前(像"今早刚换""两天没换了")
+- weekCount:本周换了几次(整数)
+- note:一句习惯吐槽(讲究人天天换还分场合 / 邋遢到能穿出感情)
+3) week(本周每天):7 个,从最早到今天,每个 { day:"星期几", color:"颜色名", colorHex:"#色值", styleType:形状四选一(三角/平角/丁字/没穿), changed:这天有没有换新的(true/false) }。要跟 habit 的频率对得上。
+${cpAttitudeRule(uname)}
+严格只输出 JSON,不要解释:
+{"today":{"color":"藏青","colorHex":"#2b3a67","style":"纯棉三角","styleType":"三角","pattern":"纯色","worn":true,"bandHex":"#111111","logo":true,"bandText":"CK","voiceTitle":"鸡巴有话说","voice":"..."},"habit":{"changeEvery":"1-2天","lastChange":"今早刚换","weekCount":4,"note":"..."},"week":[{"day":"周一","color":"黑","colorHex":"#222222","styleType":"平角","changed":true}]}`;
+    const raw = await callXhsAPI(sys, `生成 ${cname} 的苦茶子`);
+    if (!raw) { toastr.error('没偷看成功(模型没返回),再点一次 ↻'); return; }
+    const j = tryParseJSON(raw, null);
+    if (!j || !j.today) { toastr.warning('这次没解析出内容,再点一次 ↻'); return; }
+    const clip = (s, n) => String(s || '').slice(0, n);
+    const SHAPES = ['三角', '平角', '丁字', '没穿'];
+    const shapeFrom = (styleType, txt) => { const s = String(txt || '') + ' ' + String(styleType || ''); if (/没穿|光着|没有穿|裸/.test(s)) return '没穿'; if (/丁字|t字|t裤|thong|丁裤/i.test(s)) return '丁字'; if (/平角|四角|四脚|boxer|拳击|阿罗|老头|盒子|安全裤/i.test(s)) return '平角'; if (/三角|bikini|比基尼|低腰|高叉/i.test(s)) return '三角'; if (SHAPES.includes(styleType)) return styleType; if (styleType === '卡通') return '平角'; if (styleType === '蕾丝') return '三角'; return '三角'; };
+    const hx = s => /^#?[0-9a-fA-F]{6}$/.test(String(s || '')) ? (String(s).startsWith('#') ? String(s) : '#' + s) : '#cfd3dc';
+    const hxe = s => /^#?[0-9a-fA-F]{6}$/.test(String(s || '')) ? (String(s).startsWith('#') ? String(s) : '#' + s) : '';
+    const tt = j.today || {};
+    const hh = (j.habit && typeof j.habit === 'object') ? j.habit : {};
+    const week = (Array.isArray(j.week) ? j.week : []).slice(0, 7).map(w => ({
+      day: clip(w && w.day, 8), color: clip(w && w.color, 12), colorHex: hx(w && w.colorHex), styleType: shapeFrom(w && w.styleType, w && w.color), changed: !!(w && w.changed),
+    }));
+    const d = loadData();
+    d.charPhoneKuchazi = {
+      genAt: Date.now(),
+      today: { color: clip(tt.color, 12), colorHex: hx(tt.colorHex), style: clip(tt.style, 40), styleType: shapeFrom(tt.styleType, tt.style), pattern: clip(tt.pattern, 30), worn: tt.worn !== false, bandHex: hxe(tt.bandHex), logo: !!tt.logo, bandText: clip(tt.bandText, 6), voiceTitle: clip(tt.voiceTitle, 20), voice: clip(tt.voice, 600) },
+      habit: { changeEvery: clip(hh.changeEvery, 20), lastChange: clip(hh.lastChange, 20), weekCount: parseInt(hh.weekCount) || 0, note: clip(hh.note, 160) },
+      week,
+    };
+    await saveData(d);
+    refreshXhs();
+    toastr.success('✓ 偷看完 ta 的苦茶子');
+  }
   async function genCharPoop() {
     const d0 = loadData();
     if (isMultiCast(d0)) { toastr.info('「ta 的手机」暂时只支持单人卡'); return; }
@@ -1580,9 +1748,71 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
           ${tile('cp-taobao', 'taobao', '🛒', '淘宝', 0)}
           ${tile('cp-alipay', 'alipay', '💰', '支付宝', 0)}
           ${tile('cp-doubao', 'doubao', '🫛', '豆包', 0)}
-          ${tile('cp-poop', 'poop', `<img src="${POOP_IMG}" style="width:84%;height:84%;object-fit:contain"/>`, '拉了吗', 0)}
+          ${tile('cp-poop', 'poop', `<img src="${POOP_IMG}" style="width:84%;height:84%;object-fit:contain"/>`, '拉了么', 0)}
+          ${tile('cp-monitor', 'monitor', '💦', '撸了么', 0)}
+          ${tile('cp-kuchazi', 'kuchazi', '🩲', '苦茶子', 0)}
         </div>
       </div>`;
+  }
+  function renderCharPhoneMonitor(d) {
+    const m = d.charPhoneMonitor;
+    const refr = `<div data-action="cp-monitor-refresh" title="重新调取" style="width:30px;display:flex;justify-content:center;cursor:pointer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#bbb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><polyline points="20.5 3.5 20.5 8 16 8"/></svg></div>`;
+    const top = `<div style="display:flex;align-items:center;padding:10px 8px;background:#171520;border-bottom:1px solid #2a2735;flex-shrink:0"><div data-action="cp-back" data-route="cp-home" style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:#ddd;font-size:25px;cursor:pointer">‹</div><div style="flex:1;text-align:center;font-size:16px;font-weight:600;color:#f0eef7">撸了么</div>${refr}</div>`;
+    if (!m || !(m.days || []).length) return top + `<div class="xhs-scroll" style="background:#0f0e16"><div class="xhs-empty" style="color:#777">调取中…(没动静就点右上角 ↻)</div></div>`;
+    const sm = m.summary || {};
+    const summaryCard = `<div style="display:flex;gap:10px;margin-bottom:14px">
+      <div style="flex:1;background:#1d1a28;border:1px solid #2c2838;border-radius:14px;padding:13px 8px;text-align:center"><div style="font-size:26px;font-weight:700;color:#ff6b9d">${sm.soloCount || 0}</div><div style="font-size:11px;color:#9b96ab;margin-top:2px">本周自慰 · 次</div></div>
+      <div style="flex:1;background:#1d1a28;border:1px solid #2c2838;border-radius:14px;padding:13px 8px;text-align:center"><div style="font-size:26px;font-weight:700;color:#7c8cff">${sm.pornCount || 0}</div><div style="font-size:11px;color:#9b96ab;margin-top:2px">看片 · 天</div></div>
+    </div>`;
+    const line = (color, label, val) => `<div style="font-size:12.5px;color:${color};line-height:1.65;margin-top:7px"><span style="opacity:.7">${label}</span>${esc(val)}</div>`;
+    const rows = m.days.map(x => {
+      const soloBadge = x.solo
+        ? `<span style="background:#3a1f2e;color:#ff8fb3;border-radius:6px;padding:2px 8px;font-size:11px;white-space:nowrap">自慰 ✓${x.soloTimes ? ' ' + esc(x.soloTimes) : ''}</span>`
+        : `<span style="background:#1e1b29;color:#6b6779;border-radius:6px;padding:2px 8px;font-size:11px">自慰 ✗</span>`;
+      const pornBadge = x.porn
+        ? `<span style="background:#1f2540;color:#9aaaff;border-radius:6px;padding:2px 8px;font-size:11px">看片 ✓</span>`
+        : `<span style="background:#1e1b29;color:#6b6779;border-radius:6px;padding:2px 8px;font-size:11px">看片 ✗</span>`;
+      const fant = (x.solo && x.soloFantasy) ? line('#d8aace', '👤 幻想:', x.soloFantasy) : '';
+      const feel = (x.solo && x.soloFeel) ? line('#e6b6b6', '🔥 感受:', x.soloFeel) : '';
+      const ptype = (x.porn && x.pornType) ? line('#9aa6d8', '🎬 类型:', x.pornType) : '';
+      const preact = (x.porn && x.pornNote) ? line('#9aa0c4', '💭 ', x.pornNote) : '';
+      return `<div style="background:#17141f;border:1px solid #262232;border-radius:14px;padding:12px 13px;margin-bottom:10px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:600;color:#e8e4f2">${esc(x.day)}</span><span style="display:flex;gap:6px;flex-wrap:wrap">${soloBadge}${pornBadge}</span></div>
+        ${fant}${feel}${ptype}${preact}
+      </div>`;
+    }).join('');
+    return top + `<div class="xhs-scroll" style="background:#0f0e16;padding:14px">${summaryCard}${rows}</div>`;
+  }
+  function renderCharPhoneKuchazi(d) {
+    const k = d.charPhoneKuchazi;
+    const refr = `<div data-action="cp-kuchazi-refresh" title="重新偷看" style="width:30px;display:flex;justify-content:center;cursor:pointer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#c98aa6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><polyline points="20.5 3.5 20.5 8 16 8"/></svg></div>`;
+    const top = `<div style="display:flex;align-items:center;padding:10px 8px;background:#fff0f6;border-bottom:1px solid #ffd9e8;flex-shrink:0"><div data-action="cp-back" data-route="cp-home" style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:#b56b89;font-size:25px;cursor:pointer">‹</div><div style="flex:1;text-align:center;font-size:16px;font-weight:600;color:#a64d70">苦茶子</div>${refr}</div>`;
+    if (!k || !k.today) return top + `<div class="xhs-scroll" style="background:#fff7fb"><div class="xhs-empty" style="color:#c79bab">偷看中…(没动静就点右上角 ↻)</div></div>`;
+    const t = k.today, h = k.habit || {}, wk = k.week || [];
+    const badge = (txt, bg, fg) => `<span style="background:${bg};color:${fg};border-radius:20px;padding:3px 11px;font-size:12px;font-weight:600">${esc(txt)}</span>`;
+    const todayCard = `<div style="background:#fff;border:1px solid #ffd9e8;border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(220,120,160,.08)">
+      <div style="font-size:12px;color:#c98aa6;margin-bottom:6px">今天这条 👀</div>
+      <div style="width:150px;height:105px;margin:0 auto 12px">${kuchaziSvg(t.styleType, t.colorHex, t.worn, { bandHex: t.bandHex, logo: t.logo, bandText: t.bandText, pattern: t.pattern })}</div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px">
+        ${badge(t.color || '?', '#ffe3ef', '#c0436e')}${badge(t.style || t.styleType || '?', '#fde7c7', '#a9772a')}${t.pattern ? badge(t.pattern, '#e7f0ff', '#4f6ea9') : ''}${t.worn === false ? badge('现在没穿 🙈', '#eeeeee', '#888888') : ''}
+      </div>
+      ${t.voice ? `<div style="background:#fff5f9;border:1px solid #ffe0ec;border-radius:12px;padding:11px 13px;margin-top:2px"><div style="font-size:12.5px;font-weight:700;color:#c0436e;margin-bottom:5px">${esc(t.voiceTitle || '它有话说')}</div><div style="font-size:13px;color:#7a6a72;line-height:1.7;white-space:pre-wrap">${esc(t.voice)}</div></div>` : ''}
+    </div>`;
+    const habitCard = `<div style="background:#fff;border:1px solid #ffd9e8;border-radius:18px;padding:14px 16px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-around;text-align:center">
+        <div><div style="font-size:14px;font-weight:700;color:#c0436e">${esc(h.changeEvery || '?')}</div><div style="font-size:11px;color:#b596a4;margin-top:2px">多久换一次</div></div>
+        <div><div style="font-size:14px;font-weight:700;color:#c0436e">${esc(h.lastChange || '?')}</div><div style="font-size:11px;color:#b596a4;margin-top:2px">上次换</div></div>
+        <div><div style="font-size:14px;font-weight:700;color:#c0436e">${h.weekCount != null ? h.weekCount : '?'}</div><div style="font-size:11px;color:#b596a4;margin-top:2px">本周换 · 次</div></div>
+      </div>
+      ${h.note ? `<div style="font-size:12.5px;color:#8a7a82;line-height:1.6;border-top:1px dashed #ffd9e8;padding-top:9px;margin-top:10px">${esc(h.note)}</div>` : ''}
+    </div>`;
+    const weekStrip = wk.length ? `<div style="background:#fff;border:1px solid #ffd9e8;border-radius:18px;padding:14px 10px">
+      <div style="font-size:12px;color:#c98aa6;margin:0 6px 10px">本周每天</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+        ${wk.map(w => `<div style="text-align:center"><div style="height:40px">${kuchaziSvg(w.styleType, w.colorHex, true)}</div><div style="font-size:10px;color:#9a8893;margin-top:3px">${esc(w.day || '')}</div><div style="font-size:9px;color:${w.changed ? '#d36b94' : '#ccbcc5'}">${w.changed ? '换' : '·'}</div></div>`).join('')}
+      </div>
+    </div>` : '';
+    return top + `<div class="xhs-scroll" style="background:#fff7fb;padding:14px">${todayCard}${habitCard}${weekStrip}</div>`;
   }
   function renderCharPhoneLock(d) {
     const dark = d.charPhoneTextColor === 'dark';
@@ -2309,6 +2539,8 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
           <div class="xhs-pub-row" style="margin-top:8px"><label>支付宝 图标 URL</label><input id="set-cpicon-alipay" value="${esc((d.charPhoneIcons || {}).alipay || '')}" placeholder="留空用默认 💰"/></div>
           <div class="xhs-pub-row" style="margin-top:8px"><label>豆包 图标 URL</label><input id="set-cpicon-doubao" value="${esc((d.charPhoneIcons || {}).doubao || '')}" placeholder="留空用默认 🫛"/></div>
           <div class="xhs-pub-row" style="margin-top:8px"><label>拉屎 图标 URL</label><input id="set-cpicon-poop" value="${esc((d.charPhoneIcons || {}).poop || '')}" placeholder="留空用默认 💩"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>撸了么 图标 URL</label><input id="set-cpicon-monitor" value="${esc((d.charPhoneIcons || {}).monitor || '')}" placeholder="留空用默认 💦"/></div>
+          <div class="xhs-pub-row" style="margin-top:8px"><label>苦茶子 图标 URL</label><input id="set-cpicon-kuchazi" value="${esc((d.charPhoneIcons || {}).kuchazi || '')}" placeholder="留空用默认 🩲"/></div>
           <div class="xhs-pub-row" style="margin-top:14px">
             <label>🎁 外观分享(图标 + 壁纸)— 可应用到别的聊天 / 别人的酒馆</label>
             <button class="xhs-set-btn" data-action="cp-theme-export" style="background:#9b6dff">⬆ 导出当前外观</button>
@@ -8398,7 +8630,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
     if (has('set-cplockbg')) { d.charPhoneLockBg = (readInputCache('set-cplockbg') || '').trim(); }
     if (has('set-cp-darktext')) { d.charPhoneTextColor = chk('set-cp-darktext') ? 'dark' : 'light'; }
     if (has('set-hide-fab')) { try { getTop().localStorage.setItem('xhs_yuyuan_fab_hidden', chk('set-hide-fab') ? '1' : '0'); } catch (e) {} try { ensureFab(true); } catch (e) {} }
-    if (has('set-cpicon-wx')) { d.charPhoneIcons = Object.assign({}, d.charPhoneIcons, { wx: (readInputCache('set-cpicon-wx') || '').trim(), notes: (readInputCache('set-cpicon-notes') || '').trim(), safari: (readInputCache('set-cpicon-safari') || '').trim(), music: (readInputCache('set-cpicon-music') || '').trim(), taobao: (readInputCache('set-cpicon-taobao') || '').trim(), alipay: (readInputCache('set-cpicon-alipay') || '').trim(), doubao: (readInputCache('set-cpicon-doubao') || '').trim(), poop: (readInputCache('set-cpicon-poop') || '').trim() }); }
+    if (has('set-cpicon-wx')) { d.charPhoneIcons = Object.assign({}, d.charPhoneIcons, { wx: (readInputCache('set-cpicon-wx') || '').trim(), notes: (readInputCache('set-cpicon-notes') || '').trim(), safari: (readInputCache('set-cpicon-safari') || '').trim(), music: (readInputCache('set-cpicon-music') || '').trim(), taobao: (readInputCache('set-cpicon-taobao') || '').trim(), alipay: (readInputCache('set-cpicon-alipay') || '').trim(), doubao: (readInputCache('set-cpicon-doubao') || '').trim(), poop: (readInputCache('set-cpicon-poop') || '').trim(), monitor: (readInputCache('set-cpicon-monitor') || '').trim(), kuchazi: (readInputCache('set-cpicon-kuchazi') || '').trim() }); }
     if (has('set-home-bgurl')) {
       const u = (readInputCache('set-home-bgurl') || '').trim();
       if (u) d.homeBg = `center/cover no-repeat url("${u.replace(/"/g, '')}")`;
@@ -9014,13 +9246,15 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'dismiss-notif': await dismissNotif(id); break;
           case 'open-app': await openApp(app); break;
           case 'open-charphone': await openCharPhone(); break;
-          case 'cp-open': await cpNav(route); if (route === 'cp-music') { const dm = loadData(); if (!dm.charPhoneMusic) genCharMusic(); } else if (route === 'cp-taobao') { const dm = loadData(); if (!dm.charPhoneTaobao) genCharTaobao(); } else if (route === 'cp-alipay') { const dm = loadData(); if (!dm.charPhoneAlipay) genCharAlipay(); } else if (route === 'cp-doubao') { const dm = loadData(); if (!dm.charPhoneDoubao) genCharDoubao(); } else if (route === 'cp-poop') { const dm = loadData(); if (!dm.charPhonePoop) genCharPoop(); } break;
+          case 'cp-open': await cpNav(route); if (route === 'cp-music') { const dm = loadData(); if (!dm.charPhoneMusic) genCharMusic(); } else if (route === 'cp-taobao') { const dm = loadData(); if (!dm.charPhoneTaobao) genCharTaobao(); } else if (route === 'cp-alipay') { const dm = loadData(); if (!dm.charPhoneAlipay) genCharAlipay(); } else if (route === 'cp-doubao') { const dm = loadData(); if (!dm.charPhoneDoubao) genCharDoubao(); } else if (route === 'cp-poop') { const dm = loadData(); if (!dm.charPhonePoop) genCharPoop(); } else if (route === 'cp-monitor') { const dm = loadData(); if (!dm.charPhoneMonitor) genCharMonitor(); } else if (route === 'cp-kuchazi') { const dm = loadData(); if (!dm.charPhoneKuchazi) genCharKuchazi(); } break;
           case 'cp-music-refresh': await genCharMusic(); break;
           case 'cp-tb-refresh': await genCharTaobao(); break;
           case 'cp-tb-orders': await cpNav('cp-tb-orders', { tbStatus: cat || null }); break;
           case 'cp-ali-refresh': await genCharAlipay(); break;
           case 'cp-doubao-refresh': await genCharDoubao(); break;
           case 'cp-poop-refresh': await genCharPoop(); break;
+          case 'cp-monitor-refresh': await genCharMonitor(); break;
+          case 'cp-kuchazi-refresh': await genCharKuchazi(); break;
           case 'cp-ali-cat': { const dd = loadData(); dd.routeContext = dd.routeContext || {}; dd.routeContext.aliCat = cat || '全部'; await saveData(dd); refreshXhs(); break; }
           case 'cp-back': await cpNav(route); break;
           case 'cp-open-chat': await cpNav('cp-wx-chat', { cpChat: $btn.data('idx') }); break;
@@ -10233,7 +10467,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v347 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v357 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

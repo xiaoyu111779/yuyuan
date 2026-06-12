@@ -752,6 +752,21 @@
     for (let z = stack.length - 1; z >= 0; z--) cut += stack[z];
     return cut;
   }
+  // 抠出第一个"括号配平的完整结构"({...} 或 [...]),忽略字符串内的括号。
+  // 解决:模型把目标 JSON 裹在 <timebar>/<status> 等外壳里返回时,粗暴的"首{到尾}"会跨度错误
+  function firstBalanced(s, openCh, closeCh) {
+    const start = s.indexOf(openCh);
+    if (start < 0) return null;
+    let depth = 0, inStr = false, escp = false;
+    for (let idx = start; idx < s.length; idx++) {
+      const ch = s[idx];
+      if (inStr) { if (escp) escp = false; else if (ch === '\\') escp = true; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') inStr = true;
+      else if (ch === openCh) depth++;
+      else if (ch === closeCh) { depth--; if (depth === 0) return s.slice(start, idx + 1); }
+    }
+    return null;
+  }
   function tryParseJSON(raw, fallback = null) {
     if (!raw) return fallback;
     let s0 = raw.replace(/```json|```/g, '').trim();
@@ -762,10 +777,14 @@
     if (useArr) s = s0.slice(k, l + 1);
     else if (i >= 0 && j > i) s = s0.slice(i, j + 1);
     const noTrail = (x) => x.replace(/,\s*([}\]])/g, '$1'); // 去尾随逗号
-    // 截断救援:从首个 { 或 [ 开始的原文(不靠 lastIndexOf 收尾),交给 salvageJson 补全
     const startIdx = (useArr || i < 0) ? k : (k >= 0 && k < i ? k : i);
     const rawFromStart = startIdx >= 0 ? s0.slice(startIdx) : s0;
-    const attempts = [s, noTrail(s), noTrail(sanitizeJsonStr(s)), salvageJson(rawFromStart), noTrail(sanitizeJsonStr(salvageJson(rawFromStart)))];
+    const fb = firstBalanced(s0, useArr ? '[' : '{', useArr ? ']' : '}'); // 配平抠出的目标结构(应对外壳包裹)
+    const attempts = [
+      s, noTrail(s), noTrail(sanitizeJsonStr(s)),
+      fb, fb && noTrail(fb), fb && noTrail(sanitizeJsonStr(fb)),
+      salvageJson(rawFromStart), noTrail(sanitizeJsonStr(salvageJson(rawFromStart))),
+    ].filter(Boolean);
     for (const a of attempts) {
       try { const r = JSON.parse(a); if (r && typeof r === 'object') return r; } catch (e) {}
     }
@@ -2887,10 +2906,14 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
   function stripStatusBlocks(text) {
     if (!text) return text;
     let t = String(text);
-    t = t.replace(/<\s*([A-Za-z_]*Status(?:Bar|Block|Panel)?|状态栏)[^>]*>[\s\S]*?<\/\s*\1[^>]*>/gi, '');
-    t = t.replace(/<\/?\s*(?:[A-Za-z_]*Status(?:Bar|Block|Panel)?|状态栏)[^>]*>/gi, '');
-    t = t.replace(/\[\s*(?:Time|Date|Locate|Location|Place|Outfit|Thoughts|Mind|Mood|Emotion|Status|State|Weather|Action|心情|地点|时间|日期|穿着|穿搭|想法|状态|天气|动作)\s*[\|｜][^\]\n]*\]/gi, '');
-    return t;
+    const TAGS = 'Sy_StatusBar|[A-Za-z_]*StatusBar|StatusBlock|StatusPanel|状态栏|timebar|时间条|status|affection|好感度|dynamic|pinglun|signature|moodbar';
+    // 成对的状态壳整块删:<timebar>…</timebar>、<status>…</status>、<affection>…</affection> 等
+    t = t.replace(new RegExp('<\\s*(' + TAGS + ')\\b[^>]*>[\\s\\S]*?<\\/\\s*\\1\\b[^>]*>', 'gi'), '');
+    // 残留的单个状态壳标签
+    t = t.replace(new RegExp('<\\/?\\s*(?:' + TAGS + ')\\b[^>]*>', 'gi'), '');
+    // 状态栏的方括号字段:[Time|…] [Outfit|…] [signature|…] [favor|…] 等(带竖线分隔的才删,避免误伤普通方括号)
+    t = t.replace(/\[\s*(?:Time|Date|Locate|Location|Place|Outfit|Thoughts|Mind|Mood|Emotion|Status|State|Weather|Action|signature|stats|favor|dynamic|心情|地点|时间|日期|穿着|穿搭|想法|状态|天气|动作|签名|好感|续局)\s*[\|｜][^\]\n]*\]/gi, '');
+    return t.replace(/\n{3,}/g, '\n\n').trim();
   }
   function applyBanWords(d, text) {
     try {
@@ -10099,7 +10122,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v339 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v340 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

@@ -38,6 +38,8 @@
   const DEFAULT_DATA = {
     api: { useMainApi: true, proxy_preset: '', apiurl: '', key: '', model: '', source: '', temperature: 0.8 },
     syncToMain: true,
+    wxDmSync: true,           // 微信里和 char/出场角色的 1对1 私信回复,是否同步进主线(关=私聊不进主剧情)
+    xhsDmSync: true,          // 小红书里和 char/出场角色的私信回复,是否同步进主线(关=私信不进主剧情)
     syncHidden: false,
     useStoryTime: false,    // 时间按剧情走(帖子/评论/微信/群聊显示剧情时间;主界面时钟仍现实时间)
     storyTimeManual: '',    // 手动指定的当前剧情时间(优先级最高)
@@ -842,6 +844,12 @@
 
   // char 相关互动【强制】进主线(无视全局同步开关),且不隐藏(成为正式剧情)
   async function forceSyncToMain(text) {
+    // 私信类同步受【分渠道开关】控制:微信私信看 wxDmSync,小红书私信看 xhsDmSync(关了就不进主线)。
+    // 其它(小红书发帖/评论/揭穿等剧情事件)不带这俩标签,照常强制同步。
+    const _t = String(text || '');
+    const _d = loadData();
+    if (/^\s*\[微信\]/.test(_t) && _d.wxDmSync === false) return;
+    if (/^\s*\[小红书·私信\]/.test(_t) && _d.xhsDmSync === false) return;
     pushXhsDirective();
     try {
       await createChatMessages([{
@@ -8195,6 +8203,15 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
             同步到主对话(发帖/评论/群聊会注入主剧情)
           </label>
           <label class="xhs-set-check">
+            <input id="set-wxdm-sync" type="checkbox" ${d.wxDmSync !== false ? 'checked' : ''}/>
+            微信里和 ta 的私聊 → 同步进主线
+          </label>
+          <label class="xhs-set-check">
+            <input id="set-xhsdm-sync" type="checkbox" ${d.xhsDmSync !== false ? 'checked' : ''}/>
+            小红书里和 ta 的私信 → 同步进主线
+          </label>
+          <div class="xhs-set-help">上面两个管的是【和 char / 出场角色本人的 1 对 1 私聊】要不要进主剧情。关掉后,你在那个渠道和 ta 的私聊内容(含私信里发生的揭穿/認出)就不写进主线、主线 AI 也看不到——适合想"私下撩"但不想影响主线的时候。小红书发帖/评论、微信群仍由上面的「同步到主对话」开关控制,跟这俩无关。</div>
+          <label class="xhs-set-check">
             <input id="set-sync-hidden" type="checkbox" ${d.syncHidden ? 'checked' : ''}/>
             同步消息隐藏(AI 看得见但你看不见)
           </label>
@@ -8276,6 +8293,8 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
       }
     }
     if (has('set-sync-main')) { d.syncToMain = !!chk('set-sync-main'); }
+    if (has('set-wxdm-sync')) d.wxDmSync = !!chk('set-wxdm-sync');
+    if (has('set-xhsdm-sync')) d.xhsDmSync = !!chk('set-xhsdm-sync');
     if (has('set-sync-hidden')) d.syncHidden = !!chk('set-sync-hidden');
     if (has('set-use-story-time')) d.useStoryTime = !!chk('set-use-story-time');
     if (has('set-story-time')) d.storyTimeManual = (readInputCache('set-story-time') || '').trim().slice(0, 40);
@@ -10122,7 +10141,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v340 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v341 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

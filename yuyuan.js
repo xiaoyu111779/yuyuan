@@ -365,8 +365,9 @@
   }
 
   // ============ 角色卡 + 世界书 ============
-  // 识别专用:读【当前这张卡】的实时内容/名字(读得到就用当前卡,读不到才退回全局绑定)
-  // ——避免"绑定了卡A,在卡B里识别却读到卡A、把卡A的char混进卡B花名册"
+  // 识别专用:【只读当前这张卡的实时内容/名字】,读不到就返回空——
+  // 【绝对不退回全局绑定】,否则"绑定了卡A、在卡B里识别"会把卡A的char混进卡B花名册(跨卡串)。
+  // 卡读不到时,识别还能靠世界书(那是实时按当前对话读的);宁可这张识别不出,也不能串成别张卡。
   function getRoleDescLive() {
     const c = getCharFullInfo();
     const parts = [];
@@ -374,17 +375,13 @@
     if (c.personality) parts.push('【性格】' + c.personality);
     if (c.scenario) parts.push('【场景】' + c.scenario);
     if (c.mes_example) parts.push('【对话示例】' + c.mes_example);
-    const live = parts.join('\n');
-    if (live && live.trim().length > 20) return live;
-    const d = loadData();
-    return (d.charBinding && d.charBinding.content) || live;
+    return parts.join('\n');
   }
   function getCharNameLive() {
     const c = getCharFullInfo();
     if (c.name && c.name.trim()) return c.name.trim();
     try { const ctx = getCtx(); if (ctx && ctx.name2 && String(ctx.name2).trim()) return String(ctx.name2).trim(); } catch (e) {}
-    const d = loadData();
-    return (d.charBinding && d.charBinding.name) || 'TA';
+    return '';
   }
   function getCharFullInfo() {
     try {
@@ -1205,6 +1202,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
     const upersona = getUserPersonaDesc();
     const uinfo = [upersona && ('人设:' + upersona), ubio && ('小红书签名:' + ubio)].filter(Boolean).join('\n');
     const sys = `你要生成「${cname}」这个人【自己手机里】的私密内容,供上帝视角偷看。一切都【严格基于 ta 的人设、世界书设定、当前主线剧情】,不许 OOC、不许编造跟设定冲突的人和事。
+【星座/生日铁律】只有当资料里【明确写了】某人的星座或生日时,才可以提到 ta 的星座/生日,且必须照写。【没写就绝对不要写具体星座、不要默认天蝎座、不要瞎编生日】——宁可完全不提星座这件事,也不许编。
 【${cname} 的人设/性格】:\n${role}
 ${wb ? `【世界书/设定(里面的 NPC 都按各自人设来写)】:\n${wb}\n` : ''}${uinfo ? `【${uname}(机主在意的人/也就是 {{user}} 本人)的人设资料(写到 ta、或 ta 搜跟 ta 相关的事时,星座/生日/喜好都【严格按这个】,别瞎编)】:\n${uinfo}\n` : ''}
 要生成三部分:
@@ -2889,9 +2887,36 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
       if (typeof ctx.getCharacterCardFields === 'function') {
         try { const f = ctx.getCharacterCardFields(); const p = f && (f.persona || (f.user && f.user.persona)); if (p && String(p).trim()) return String(p).trim(); } catch (e) {}
       }
+      try { const pus = ctx.powerUserSettings; if (pus && pus.persona_description && String(pus.persona_description).trim()) return String(pus.persona_description).trim(); } catch (e) {}
       try { const pu = getTop().power_user; if (pu && pu.persona_description && String(pu.persona_description).trim()) return String(pu.persona_description).trim(); } catch (e) {}
     } catch (e) {}
     return '';
+  }
+  // 诊断:把读 user 人设的每种方法的结果摊给用户看,判断"星座错"是【没读到(bug)】还是【读到了但模型没用(降智)】还是【人设里压根没写】
+  function diagUserPersona() {
+    const TOP = getTop();
+    const ctx = getCtx();
+    let r1 = '', r2 = '', r3 = '', r4 = '';
+    try { if (ctx && typeof ctx.substituteParams === 'function') { const p = ctx.substituteParams('{{persona}}'); r1 = (p && !String(p).includes('{{persona}}')) ? String(p).trim() : ''; } } catch (e) { r1 = '【报错】' + (e && e.message); }
+    try { if (ctx && typeof ctx.getCharacterCardFields === 'function') { const f = ctx.getCharacterCardFields(); r2 = String((f && (f.persona || (f.user && f.user.persona))) || '').trim(); } } catch (e) { r2 = '【报错】' + (e && e.message); }
+    try { const pus = ctx && ctx.powerUserSettings; r3 = String((pus && pus.persona_description) || '').trim(); } catch (e) { r3 = '【报错】' + (e && e.message); }
+    try { const pu = TOP.power_user; r4 = String((pu && pu.persona_description) || '').trim(); } catch (e) { r4 = '【报错】' + (e && e.message); }
+    const finalDesc = getUserPersonaDesc();
+    const uname = getUserPersonaName();
+    const cut = s => !s ? '空' : (s.length > 300 ? s.slice(0, 300) + '…(共' + s.length + '字)' : s);
+    const msg =
+      '【实际喂给查手机的「我」的人设】\n' + (finalDesc ? cut(finalDesc) : '⚠️ 空!没读到 → 模型只能瞎编星座(默认天蝎座)') +
+      '\n\n———— 分项排查(哪种方法读到了)————\n' +
+      '① {{persona}} 宏:' + cut(r1) +
+      '\n\n② getCharacterCardFields().persona:' + cut(r2) +
+      '\n\n③ powerUserSettings.persona_description:' + cut(r3) +
+      '\n\n④ power_user.persona_description:' + cut(r4) +
+      '\n\n我的人设名(name1):' + (uname || '空') +
+      '\n\n———— 结论 ————\n' +
+      (finalDesc
+        ? '✅ 读到了人设。\n· 若上面【写了星座/生日】但查手机还错 → 是模型没认真看(降智),重生成一次、或反馈我再加强提示;\n· 若上面【没写星座/生日】→ 不是 bug,是人设里没写,模型无从得知,请把星座/生日补进人设。'
+        : '❌ 三种方法都没读到人设。\n多半是:① 这个对话没连 persona(去 ST 右上「角色管理」选一个你的人设并连接到当前角色/聊天);② 或星座写在了【角色卡】里而不是【你的人设】里。\n把星座/生日写进 ST「角色管理 → 你的人设描述」就能读到了。');
+    try { TOP.alert(msg); } catch (e) { try { alert(msg); } catch (e2) { toastr.info(msg.replace(/\n/g, ' / '), '', { timeOut: 25000 }); } }
   }
   // user 的人设真名(SillyTavern persona / 角色卡里 {{user}} 的名字 name1),回退到设置里的名字
   function getUserPersonaName() {
@@ -4381,6 +4406,15 @@ ${String(text || '').slice(0, 12000)}`;
   // 从角色卡 + 世界书(禁用条目也读)识别出场角色;条目多时逐条识别,避免一次输出被截断漏人
   async function detectCast(auto) {
     const card = getRoleDescLive(); // 实时读当前卡内容,避免绑定的别张卡混进识别
+    // 自动模式双保险:① 必须读到当前卡本身;② getCharData 的名字要和【当前对话的 char 名】对得上——
+    // 对不上=getCharData 滞后/串卡(切卡太快时它可能还返回上一张卡),这种一律跳过,绝不识别,避免把别张卡的 char 填进来。
+    if (auto) {
+      if (!card || card.trim().length < 30) return;
+      const liveName = (getCharFullInfo().name || '').trim();
+      let ctxName = '';
+      try { ctxName = String((getCtx() || {}).name2 || '').trim(); } catch (e) {}
+      if (liveName && ctxName && liveName !== ctxName) return;
+    }
     const { books, entries } = await getWorldbookEntriesRaw();
     const wbChars = entries.reduce((s, e) => s + (e.content || '').length, 0);
     // 诊断:让你直接看到到底读到了什么
@@ -8274,6 +8308,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           </label>
           <button class="xhs-gen-btn" style="background:#e6e6e6;color:#555;margin-top:10px" data-action="clear-feed">🗑 清空首页生成的帖子(不影响我自己发的)</button>
           <button class="xhs-gen-btn" style="background:#e6e6e6;color:#555;margin-top:8px" data-action="reset-xhs">♻ 一键重置(清空所有帖子/评论/群聊,保留设置与资料)</button>
+          <button class="xhs-gen-btn" style="background:#fff3cd;color:#856404;margin-top:8px" data-action="test-persona">🔍 诊断:查手机读到了「我」的什么人设?(星座/生日老搞错就点这个)</button>
         </details>
 
         <div style="height:40px"></div>
@@ -8845,6 +8880,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'del-post': await deletePost(id); break;
           case 'edit-post-body': await editPostBody(id); break;
           case 'clear-feed': await clearFeed(); break;
+          case 'test-persona': diagUserPersona(); break;
           case 'reset-xhs': await resetXhsContent(); break;
           case 'group-menu': await toggleGroupMenu(); break;
           case 'clear-group-chat': await clearGroupChat(id); break;
@@ -10197,7 +10233,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v345 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v347 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

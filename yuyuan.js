@@ -667,9 +667,10 @@
         : '';
       // 评论区路人 = 陌生网友,不能看到主线剧情;noContext 时不注入剧情上下文
       const ctxSnippet = opts.noContext ? '' : await buildContextSnippet();
+      const noStatusRule = '\n【格式铁律】你产出的是社交App内容(帖子/评论/私信/聊天/简介等),【绝对不要】把角色卡的状态栏/系统格式带进来——例如 <Sy_StatusBar>…</Sy_StatusBar> 这类尖括号标签、或 [Time|…]/[Locate|…]/[Outfit|…]/[Thoughts|…] 这类带竖线的方括号字段,那是系统用的、会让页面掉格式。只按要求的格式输出。\n';
       const fullSys = ctxSnippet
-        ? `${extra}${systemPrompt}\n\n=== 当前剧情上下文 ===\n${ctxSnippet}\n=== 上下文结束 ===\n\n请基于以上剧情和角色,生成回复。`
-        : `${extra}${systemPrompt}`;
+        ? `${extra}${systemPrompt}${noStatusRule}\n\n=== 当前剧情上下文 ===\n${ctxSnippet}\n=== 上下文结束 ===\n\n请基于以上剧情和角色,生成回复。`
+        : `${extra}${systemPrompt}${noStatusRule}`;
       // 用 ordered_prompts 自定义提示词,不带预设。
       // system + user 都放进 ordered_prompts,不再额外传顶层 user_input,
       // 否则 user_input 会被自动追加到末尾,导致重复。
@@ -700,6 +701,7 @@
       let text = typeof result === 'string' ? result : (result && result.content) || '';
       if (!text) toastr.warning('主API返回为空,检查酒馆主连接是否正常');
       text = applyBanWords(d0, text);
+      text = stripStatusBlocks(text);
       return text;
     } catch (e) {
       console.error('[XHS] API error', e);
@@ -2880,6 +2882,16 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
   }
 
   // 生成后【硬过滤】:按禁词表 "原词→替换"(右边 null/空=删除)对模型输出强制替换,模型不听话也兜得住
+  // 清掉模型从角色卡泄漏进来的"状态栏/系统格式"(<Sy_StatusBar>…</…>、[Time|…]、[Outfit|…] 等)
+  // ——这些尖括号标签会被当 HTML 解析导致帖子"掉格式";社交内容里绝不该出现
+  function stripStatusBlocks(text) {
+    if (!text) return text;
+    let t = String(text);
+    t = t.replace(/<\s*([A-Za-z_]*Status(?:Bar|Block|Panel)?|状态栏)[^>]*>[\s\S]*?<\/\s*\1[^>]*>/gi, '');
+    t = t.replace(/<\/?\s*(?:[A-Za-z_]*Status(?:Bar|Block|Panel)?|状态栏)[^>]*>/gi, '');
+    t = t.replace(/\[\s*(?:Time|Date|Locate|Location|Place|Outfit|Thoughts|Mind|Mood|Emotion|Status|State|Weather|Action|心情|地点|时间|日期|穿着|穿搭|想法|状态|天气|动作)\s*[\|｜][^\]\n]*\]/gi, '');
+    return t;
+  }
   function applyBanWords(d, text) {
     try {
       if (!text) return text;
@@ -3005,13 +3017,13 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
       return `<div class="xhs-cover xhs-cover-text" style="background:${c.bg};color:${c.fg}">
         ${mineTag ? '<span class="xhs-mine-tag">我的</span>' : ''}
         <span class="xhs-cover-quote" style="color:${c.fg}">“</span>
-        <div class="xhs-cover-textmain" style="color:${c.fg}">${esc((p.coverText || p.title || '').slice(0, 24))}</div>
+        <div class="xhs-cover-textmain" style="color:${c.fg}">${esc(stripStatusBlocks(p.coverText || p.title || '').slice(0, 24))}</div>
       </div>`;
     }
     return `<div class="xhs-cover">
       ${mineTag ? '<span class="xhs-mine-tag">我的</span>' : ''}
       <svg class="xhs-cover-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="#d0d0d0" stroke-width="1.4"/><circle cx="8" cy="10" r="1.5" fill="#d0d0d0"/><path d="M3 17l5-5 4 4 3-3 6 6" stroke="#d0d0d0" stroke-width="1.4" fill="none"/></svg>
-      <div class="xhs-cover-overlay">${esc((p.coverText || '').slice(0, 18))}</div>
+      <div class="xhs-cover-overlay">${esc(stripStatusBlocks(p.coverText || '').slice(0, 18))}</div>
     </div>`;
   }
 
@@ -3046,12 +3058,12 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
       const c = p.bg || XHS_TEXT_BGS[0];
       return `<div class="xhs-view-cover xhs-view-cover-text" style="background:${c.bg}">
         <span class="xhs-cover-quote" style="color:${c.fg}">“</span>
-        <div class="xhs-view-textmain" style="color:${c.fg}">${esc(p.coverText || p.title || '')}</div>
+        <div class="xhs-view-textmain" style="color:${c.fg}">${esc(stripStatusBlocks(p.coverText || p.title || ''))}</div>
       </div>`;
     }
     return `<div class="xhs-view-cover">
       <svg viewBox="0 0 24 24" fill="none" class="xhs-cover-icon-big"><rect x="3" y="5" width="18" height="14" rx="2" stroke="#c8c8c8" stroke-width="1.2"/><circle cx="8" cy="10" r="1.5" fill="#c8c8c8"/><path d="M3 17l5-5 4 4 3-3 6 6" stroke="#c8c8c8" stroke-width="1.2" fill="none"/></svg>
-      <div class="xhs-view-cover-overlay">${esc(p.coverText || p.title)}</div>
+      <div class="xhs-view-cover-overlay">${esc(stripStatusBlocks(p.coverText || p.title || ''))}</div>
     </div>`;
   }
 
@@ -3442,7 +3454,7 @@ ${world ? `【世界观/背景】(只作氛围参考、别照抄,主角不出现
         ${detailCover(post)}
         <div class="xhs-post-body">
           <div class="xhs-post-title">${esc(post.title)}</div>
-          <div class="xhs-post-content">${esc(post.content)}</div>
+          <div class="xhs-post-content">${esc(stripStatusBlocks(post.content))}</div>
           ${(post.tags && post.tags.length) ? `<div class="xhs-post-tags">${post.tags.map(t => `<span class="xhs-tag">#${esc(t)}</span>`).join('')}</div>` : ''}
           <div class="xhs-post-meta">${stTimeLabel(d, post)} · ${formatLikes(post.likes || 0)} 赞 · ${total} 评论</div>
         </div>
@@ -10087,7 +10099,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v338 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v339 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

@@ -14,7 +14,7 @@
   const GLOBAL_APPEARANCE_KEY = 'xhs_appearance_v1';
   const GLOBAL_PREFS_KEY = 'xhs_global_prefs_v1';
   // 全局共享(跨对话跨卡):热梗/表情包/禁词/全局附加提示词/整体聊天风格(活人感)
-  const GLOBAL_PREFS_KEYS = ['memes', 'stickers', 'banWords', 'extraPrompt', 'chatStyle'];
+  const GLOBAL_PREFS_KEYS = ['memes', 'stickers', 'banWords', 'extraPrompt', 'chatStyle', 'api'];
   // ====== 默认外观(发给别人时,新用户首次打开就是这套;他们仍可自行修改) ======
   // 用设置里的"📋 导出当前外观为默认"按钮生成,把内容贴回这里即可。
   const THEME_DEFAULTS = {
@@ -1084,6 +1084,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
   function renderBody(d) {
     if (d.currentApp === 'home') return renderHome(d);
     if (d.currentApp === 'set') return renderPhoneSettings(d);
+    if (d.currentApp === 'xichang') return xichangOn() ? renderXichang(d) : renderHome(d);
     if (d.currentApp === 'charphone') {
       switch (d.currentRoute) {
         case 'cp-lock': return renderCharPhoneLock(d);
@@ -1141,6 +1142,324 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
   // ============ 桌面 / 分应用 ============
   function wxList(d) { return (d.dms || []).filter(x => x.app === 'wx' && !(isMultiCast(d) && x.isChar && !x.castId)); }
   function wxUnread(d) { return wxList(d).filter(x => x.unread).length + (d.groups || []).filter(g => g.app === 'wx' && groupUnread(g)).length; }
+  // ====== 小剧场:默契度大挑战 ======
+  const XICHANG_Q = [
+    'ta 最喜欢吃的水果', 'ta 最忍受不了的口味', 'ta 最讨厌的蔬菜', 'ta 是甜口、辣口、咸口还是酸口', 'ta 最喜欢的肉类',
+    'ta 最喜欢的饮料', 'ta 最讨厌的饮料', 'ta 爱冷饮还是热饮', 'ta 最喜欢哪个季节', 'ta 喜欢下雨天还是晴天',
+    'ta 最喜欢什么动物', '火锅、烧烤还是串串,ta 选哪个', 'ta 爱听英文歌还是中文歌', 'ta 最喜欢的国外歌手', 'ta 最喜欢的国内歌手',
+    'ta 最想去旅游的两个地方', 'ta 喜欢日出还是日落', '友谊和爱情,ta 更看重哪个', '水煮蛋还是茶叶蛋,ta 选哪个', 'ta 最喜欢的花',
+    'ta 害怕成为什么样的人', 'ta 希望成为什么样的人', 'ta 最喜欢吃的零食', 'ta 最喜欢吃的冰淇淋口味', 'ta 最喜欢的一部悬疑电影',
+    'ta 最喜欢的一部动漫电影', 'ta 最喜欢的卡通人物', 'ta 最喜欢的爱豆/偶像', 'ta 最喜欢的悬疑动漫', 'ta 的身高',
+    'ta 的出生日期', '自由、生命、爱、生活,ta 会怎么排序', 'ta 喜欢别人怎么称呼 ta', 'ta 喜欢小猫还是小狗', 'ta 最喜欢的颜色',
+    'ta 喜欢的香味:乌龙蜜桃还是薄荷茉莉', 'ta 是猪吗(逗 ta 一下,看 ta 怎么回)', 'ta 擅长安慰人吗', 'ta 偷偷哭还是在朋友面前哭', 'ta 喜欢热闹还是安静',
+    'ta 的泪点和笑点哪个更低', 'ta 是个分享欲强的人吗', 'ta 喜欢吃什么口味的蛋糕', 'ta 喜欢打雷吗', 'ta 喜欢哪种类型的风景',
+    'ta 喜欢兜风还是散步', 'ta 的输入法是九键还是26键', 'ta 更喜欢独处还是和朋友一起', 'ta 无聊的时候喜欢做什么', '吵架时 ta 喜欢用什么方式解决',
+    'ta 喜欢被以什么方式哄', '森林还是海洋,ta 选哪个', '亲亲还是抱抱,ta 选哪个', 'ta 最讨厌做的家务', 'ta 最喜欢的学科',
+    'ta 心里"让人感到舒服的空间"是什么样的', 'ta 现在单身还是有伴侣', 'ta 觉得自己的三个优点', 'ta 觉得自己的三个缺点', 'ta 对爱的看法'
+  ];
+
+  async function genXichangAnswer(direction, cname, charPersona, question, userInput) {
+    const wb = await getWorldbookContent();
+    let sys;
+    if (direction === 'ta2you') {
+      const udesc = getUserPersonaDesc();
+      sys = `这是「默契度大挑战 · ta 猜你」:${cname}(ta)要猜 {{user}} 的答案,考 ta 有多懂 {{user}}。
+【ta 的人设/性格】:
+${charPersona}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}${udesc ? `【{{user}} 的人设资料(ta 对 {{user}} 的了解里可能有这些)】:\n${udesc}\n` : ''}(你俩的相处/当前剧情见随附上下文。)
+关于 {{user}} 的题:「${question}」
+做四件事:
+1) theirs:【ta 会猜 {{user}} 的答案是什么】,像 ta 会说的、笃定点(是 ta 的猜测,不一定对,别照抄正确答案)。
+2) basis:ta 这次猜【有没有依据】——剧情相处或已知 {{user}} 人设里能推出来填 "set";纯靠蒙填 "infer"。
+3) match:{{user}} 真实答案是「${userInput}」。判断 ta 猜得准不准:2=对/八九不离十,1=沾边,0=不对。
+4) reaction:用 ta 的口吻给一句反应(猜中得意,猜错懊恼或嘴硬)。
+严格只输出 JSON:{"theirs":"...","basis":"set","match":2,"reaction":"..."}`;
+    } else {
+      sys = `这是「默契度大挑战 · 你猜 ta」:被测角色 ta = ${cname}。
+【ta 的人设/性格(必须严格遵守)】:
+${charPersona}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}(当前主线剧情见随附上下文。)
+关于 ta 的题:「${question}」
+做四件事:
+1) theirs + basis:先看【人设/世界书/当前剧情里有没有现成答案】。
+   · 有 → 照设定/剧情答,basis 填 "set"。
+   · 没有 → 按 ta 的性格/喜好/审美最合理地推一个(别离谱),basis 填 "infer"。
+   答案具体、像 ta 本人会说的,1-2 句。
+2) match:{{user}} 猜的是「${userInput}」,判断准不准:2=完全对/八九不离十,1=沾边/部分对,0=不对。
+   【宽松判分铁律】若 basis="infer"(这题设定里本就没明确答案、是 ta 现推的),判断要【放宽】:只要 {{user}} 的猜测符合 ta 的性格、合情合理,就给 1 或 2,【别】因为和你临时推的具体细节不同就判 0——人家根本无从知道。
+3) reaction:用 ta 的口吻、贴性格和你俩关系给一句反应(猜中得意/惊讶/嘴硬;猜错吐槽/失落;若这题本就没设定、是 ta 现编的,可以调侃一句"这个我自己都没想过")。
+严格只输出 JSON,不要解释:{"theirs":"ta 的真实答案","basis":"set","match":2,"reaction":"..."}`;
+    }
+    const raw = await callXhsAPI(sys, `题目:${question};对方填的是:${userInput}`);
+    if (!raw) return null;
+    const j = tryParseJSON(raw, null);
+    if (!j || typeof j.theirs === 'undefined') return null;
+    let match = parseInt(j.match); if (![0, 1, 2].includes(match)) match = 0;
+    const basis = (j.basis === 'infer') ? 'infer' : 'set';
+    return { theirs: String(j.theirs || '').slice(0, 300), basis, match, reaction: String(j.reaction || '').slice(0, 300) };
+  }
+
+  async function genXichangVerdict(direction, cname, charPersona, results, pct) {
+    const wb = await getWorldbookContent();
+    const recap = results.map((r, i) => `${i + 1}.${r.q}→${r.match === 2 ? '中' : r.match === 1 ? '沾边' : '没中'}`).join(';');
+    const dirDesc = direction === 'ta2you' ? `这轮是 ${cname} 猜 {{user}}、考 ta 有多懂 {{user}}` : `这轮是 {{user}} 猜 ${cname}、考 {{user}} 有多懂 ta`;
+    const sys = `默契度大挑战刚结束。${dirDesc}。一共 10 题,默契度 ${pct}%。逐题:${recap}。
+【ta 的人设/性格】:
+${charPersona}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}(你俩关系/当前剧情见随附上下文。)
+请用【${cname} 本人的口吻】,严格贴 ta 的人设/世界书/当前剧情和你俩关系,对这个默契结果给【一到两句总评】(可以得意、嫌弃、口嫌体正直、感动、阴阳……完全按 ta 的性格来,别出戏)。只输出这段话本身,不要引号、不要 JSON、不要任何解释。`;
+    const raw = await callXhsAPI(sys, `默契度 ${pct}%,以 ${cname} 的口吻点评一句`);
+    return raw ? String(raw).trim().replace(/^["「'\u201c]+|["」'\u201d]+$/g, '').slice(0, 400) : '';
+  }
+
+  function xcShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  async function genXichangStoryQuestions(direction, cname, charPersona, n) {
+    const wb = await getWorldbookContent();
+    const ask = (direction === 'ta2you')
+      ? `出 ${n} 个【关于 {{user}} 的问题】,紧扣你俩【当前剧情/相处】(比如 {{user}} 最近的反应/习惯、你俩之间发生过的事、{{user}} 对 ${cname} 做过说过的),让 ${cname} 来猜 {{user}} 的答案。问题要有明确答案、别太笼统,用"你…"的口吻(你=={{user}})。`
+      : `出 ${n} 个【关于 ${cname} 的问题】,紧扣 ta 的人设/世界书/【当前剧情】(比如 ta 最近的心事、做的决定、藏的小秘密、对 {{user}} 的态度、ta 的小习惯),让 {{user}} 来猜 ta 的答案。问题要有明确答案、别太笼统,用"ta…"的口吻。`;
+    const sys = `你在给「默契度大挑战」出题。${ask}
+【${cname} 的人设/性格】:
+${charPersona}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}(当前主线剧情见随附上下文,题目要真的从剧情/设定里长出来,不要泛泛。)
+严格只输出 JSON 数组(${n} 个问题字符串),别的都不要:["问题1","问题2","问题3"]`;
+    const raw = await callXhsAPI(sys, `出 ${n} 道紧扣剧情的默契题`);
+    const j = tryParseJSON(raw, null);
+    if (!Array.isArray(j)) return [];
+    return j.map(x => String(x || '').trim()).filter(Boolean).slice(0, n);
+  }
+
+  async function genXichangScanQuestions(direction, cname, charPersona, n) {
+    const wb = await getWorldbookContent();
+    const target = direction === 'ta2you'
+      ? `出 ${n} 道【关于 {{user}} 的默契题】,让 ${cname} 来猜 {{user}}。问题用"你…"的口吻(你=={{user}})。`
+      : `出 ${n} 道【关于 ${cname} 的默契题】,让 {{user}} 来猜 ta。问题用"ta…"的口吻。`;
+    const sys = `你在给「默契度大挑战」出题。【先通读下面 ta 的人设、世界书、当前剧情,然后【只挑里面确实写到、或能明确推断出标准答案】的点来出题】——这样每道题都有据可依,【绝不出设定里根本没有、只能瞎编的题】(比如设定没写就别问具体生日/身高/喜欢的歌手)。
+${target}
+覆盖面广些:性格、习惯、经历、人际关系、明确写到的喜好、当前剧情里发生的事、对 {{user}} 的态度等,挑【信息量大、有明确答案】的点。每题简短口语化、别重样。
+【${cname} 的人设/性格】:
+${charPersona}
+${wb ? `【世界书/设定】:\n${wb}\n` : ''}(当前主线剧情见随附上下文。)
+严格只输出 JSON 数组(尽量 ${n} 个;设定里能出的题不够就少给几个,别硬编):["问题1","问题2"]`;
+    const raw = await callXhsAPI(sys, `通读 ${cname} 的设定/剧情,出有据可依的默契题`);
+    const j = tryParseJSON(raw, null);
+    if (!Array.isArray(j)) return [];
+    return j.map(x => String(x || '').trim()).filter(Boolean).slice(0, n);
+  }
+
+  async function openXichang() {
+    const d = loadData();
+    d.currentApp = 'xichang'; d.currentRoute = 'xc-home'; d.routeContext = {};
+    await saveData(d); refreshXhs();
+  }
+  async function xcMatchStart() {
+    const d = loadData();
+    d.xichangMatch = { phase: 'setup', direction: 'you2ta', source: 'mix', charId: (isMultiCast(d) && (d.cast || []).length) ? null : 'main' };
+    d.currentRoute = 'xc-match';
+    await saveData(d); refreshXhs();
+  }
+  async function xcSetDir(dir) {
+    const d = loadData(); const m = d.xichangMatch; if (!m) return;
+    m.direction = (dir === 'ta2you') ? 'ta2you' : 'you2ta';
+    await saveData(d); refreshXhs();
+  }
+  async function xcSetSrc(src) {
+    const d = loadData(); const m = d.xichangMatch; if (!m) return;
+    m.source = (src === 'scan') ? 'scan' : 'mix';
+    await saveData(d); refreshXhs();
+  }
+  async function xcSetChar(id) {
+    const d = loadData(); const m = d.xichangMatch; if (!m) return;
+    m.charId = id; await saveData(d); refreshXhs();
+  }
+  async function xcBegin() {
+    const d = loadData(); const m = d.xichangMatch; if (!m) return;
+    let charId = m.charId, cname, charPersona;
+    if (isMultiCast(d) && (d.cast || []).length && !charId) { toastr.info('先选一个角色~'); return; }
+    if (charId && charId !== 'main') {
+      const c = (d.cast || []).find(x => x.id === charId);
+      if (!c) { toastr.error('没找到这个角色'); return; }
+      cname = c.name; charPersona = c.persona || '';
+    } else { charId = 'main'; cname = getCharName(); charPersona = getRoleDesc() || ''; }
+    const dir = m.direction || 'you2ta';
+    const source = m.source || 'mix';
+    let questions = [], recent = (loadData().xichangRecentQ) || [];
+    if (source === 'scan') {
+      toastr.info('正在通读 ta 的设定/剧情来出题…');
+      let qs = [];
+      try { qs = await genXichangScanQuestions(dir, cname, charPersona, 10); } catch (e) {}
+      questions = qs.slice(0, 10);
+      if (questions.length < 10) {
+        let avail = XICHANG_Q.filter(q => !recent.includes(q));
+        if (avail.length < (10 - questions.length)) avail = XICHANG_Q.slice();
+        xcShuffle(avail);
+        const add = avail.slice(0, 10 - questions.length);
+        recent = recent.concat(add).slice(-24);
+        questions = questions.concat((dir === 'ta2you') ? add.map(q => q.replace(/ta/g, '你')) : add);
+      }
+    } else {
+      toastr.info('正在出题…（含剧情题,稍等)');
+      let storyQs = [];
+      try { storyQs = await genXichangStoryQuestions(dir, cname, charPersona, 3); } catch (e) {}
+      storyQs = storyQs.slice(0, 3);
+      let avail = XICHANG_Q.filter(q => !recent.includes(q));
+      if (avail.length < (10 - storyQs.length)) { avail = XICHANG_Q.slice(); recent = []; }
+      xcShuffle(avail);
+      const poolRaw = avail.slice(0, 10 - storyQs.length);
+      recent = recent.concat(poolRaw).slice(-24);
+      const poolQs = (dir === 'ta2you') ? poolRaw.map(q => q.replace(/ta/g, '你')) : poolRaw;
+      questions = xcShuffle(poolQs.concat(storyQs)).slice(0, 10);
+    }
+    if (!questions.length) { toastr.error('出题失败,再点一次'); return; }
+    const d2 = loadData();
+    d2.xichangRecentQ = recent;
+    d2.xichangMatch = { direction: dir, source, charId, cname, charPersona, questions, idx: 0, results: [], phase: 'guess' };
+    await saveData(d2); refreshXhs();
+  }
+  async function xcGuess() {
+    const d = loadData(); const m = d.xichangMatch;
+    if (!m || m.phase !== 'guess') return;
+    const mine = (readInputCache('xc-guess-input') || '').trim();
+    if (!mine) { toastr.info(m.direction === 'ta2you' ? '先写下你自己的真实答案~' : '先写下你猜的答案~'); return; }
+    const q = m.questions[m.idx];
+    toastr.info('翻牌中…');
+    const res = await genXichangAnswer(m.direction, m.cname, m.charPersona, q, mine);
+    if (!res) { toastr.error('没出结果,再点一次「翻牌」'); return; }
+    const d2 = loadData(); const m2 = d2.xichangMatch; if (!m2) return;
+    m2.results[m2.idx] = { q, mine, theirs: res.theirs, basis: res.basis, match: res.match, reaction: res.reaction };
+    m2.phase = 'reveal';
+    clearInputCache('xc-guess-input');
+    await saveData(d2); refreshXhs();
+  }
+  async function xcNext() {
+    const d = loadData(); const m = d.xichangMatch; if (!m) return;
+    if (m.idx < m.questions.length - 1) { m.idx++; m.phase = 'guess'; await saveData(d); refreshXhs(); }
+  }
+  async function xcFinish() {
+    const d = loadData(); const m = d.xichangMatch; if (!m) return;
+    const total = m.questions.length;
+    const pts = m.results.reduce((s, r) => s + (r && r.match === 2 ? 1 : r && r.match === 1 ? 0.5 : 0), 0);
+    const pct = Math.round(pts / total * 100);
+    toastr.info(m.cname + ' 正在点评…');
+    const verdict = await genXichangVerdict(m.direction, m.cname, m.charPersona, m.results, pct);
+    const d2 = loadData(); const m2 = d2.xichangMatch; if (!m2) return;
+    m2.pct = pct; m2.verdict = verdict; m2.phase = 'done';
+    await saveData(d2); refreshXhs();
+  }
+  async function xcAgain() {
+    const d = loadData(); const m = d.xichangMatch; if (!m) return;
+    d.xichangMatch = { phase: 'setup', direction: m.direction || 'you2ta', source: m.source || 'mix', charId: m.charId || ((isMultiCast(d) && (d.cast || []).length) ? null : 'main') };
+    await saveData(d); refreshXhs();
+  }
+  async function xcExit() {
+    const d = loadData(); d.xichangMatch = null; d.currentRoute = 'xc-home';
+    await saveData(d); refreshXhs();
+  }
+
+  function renderXichang(d) {
+    if (d.currentRoute === 'xc-match') return renderXichangMatch(d);
+    const top = `<div style="display:flex;align-items:center;padding:12px 10px;background:linear-gradient(135deg,#ffb347,#ff8c69);color:#fff;flex-shrink:0"><div data-action="open-app" data-app="home" style="width:32px;font-size:24px;cursor:pointer">‹</div><div style="flex:1;text-align:center;font-size:17px;font-weight:700;letter-spacing:1px">🎭 小剧场</div><div style="width:32px"></div></div>`;
+    const card = `<div data-action="xc-match-start" style="background:#fff;border-radius:18px;padding:16px;box-shadow:0 3px 14px rgba(255,140,105,.18);cursor:pointer;display:flex;align-items:center;gap:14px">
+      <div style="width:54px;height:54px;border-radius:15px;background:linear-gradient(135deg,#ff8c69,#ff6b9d);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">💞</div>
+      <div style="flex:1"><div style="font-size:15.5px;font-weight:700;color:#333">默契度大挑战</div><div style="font-size:12.5px;color:#999;margin-top:3px;line-height:1.5">每轮 10 题,看你俩有多默契~可选你猜 ta、或 ta 猜你</div></div>
+      <div style="color:#ff8c69;font-size:22px">›</div>
+    </div>`;
+    return top + `<div class="xhs-scroll" style="background:#fff4ee;padding:16px">
+      <div style="font-size:13px;color:#c98a5e;font-weight:700;margin:2px 4px 12px">常驻活动</div>
+      ${card}
+      <div style="font-size:11.5px;color:#bbab9e;text-align:center;margin-top:20px;line-height:1.6">节日限定活动以后再上~ 🎏</div>
+    </div>`;
+  }
+
+  function renderXichangMatch(d) {
+    const m = d.xichangMatch;
+    const back = `<div data-action="xc-exit" style="width:34px;font-size:24px;cursor:pointer;color:#fff">‹</div>`;
+    const head = (title) => `<div style="display:flex;align-items:center;padding:12px 10px;background:linear-gradient(135deg,#ff8c69,#ff6b9d);color:#fff;flex-shrink:0">${back}<div style="flex:1;text-align:center;font-size:16px;font-weight:700">${title}</div><div style="width:34px"></div></div>`;
+    if (!m) return head('默契度大挑战') + `<div class="xhs-scroll" style="background:#fff4ee"><div class="xhs-empty">已结束</div></div>`;
+    const dirYou = m.direction === 'ta2you';
+
+    if (m.phase === 'setup') {
+      const srcBtn = (key, label, sub) => { const on = (m.source || 'mix') === key; return `<div data-action="xc-set-src" data-src="${key}" style="flex:1;border:2px solid ${on ? '#ff6b9d' : '#ffd9c9'};background:${on ? '#fff0f4' : '#fff'};border-radius:14px;padding:12px 8px;text-align:center;cursor:pointer"><div style="font-size:13.5px;font-weight:700;color:${on ? '#ff6b9d' : '#666'}">${label}</div><div style="font-size:10px;color:#aaa;margin-top:3px">${sub}</div></div>`; };
+      const dirBtn = (key, label, sub) => { const on = (m.direction || 'you2ta') === key; return `<div data-action="xc-set-dir" data-dir="${key}" style="flex:1;border:2px solid ${on ? '#ff6b9d' : '#ffd9c9'};background:${on ? '#fff0f4' : '#fff'};border-radius:14px;padding:13px 10px;text-align:center;cursor:pointer"><div style="font-size:14.5px;font-weight:700;color:${on ? '#ff6b9d' : '#666'}">${label}</div><div style="font-size:11px;color:#aaa;margin-top:3px">${sub}</div></div>`; };
+      let charPick = '';
+      if (isMultiCast(d) && (d.cast || []).length) {
+        const items = (d.cast || []).map(c => { const on = m.charId === c.id; return `<div data-action="xc-set-char" data-id="${c.id}" style="display:flex;align-items:center;gap:10px;border:2px solid ${on ? '#ff6b9d' : '#ffd9c9'};background:${on ? '#fff0f4' : '#fff'};border-radius:12px;padding:10px 13px;margin-bottom:8px;cursor:pointer"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#ff8c69,#ff6b9d);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">${esc((c.name || '?').slice(0, 1))}</div><div style="flex:1;font-size:14px;font-weight:600;color:#333">${esc(c.name || '')}</div>${on ? '<div style="color:#ff6b9d;font-weight:700">✓</div>' : ''}</div>`; }).join('');
+        charPick = `<div style="font-size:13px;color:#c98a5e;font-weight:700;margin:18px 4px 10px">跟谁测</div>${items}`;
+      }
+      const body = `<div style="font-size:13px;color:#c98a5e;font-weight:700;margin:2px 4px 10px">选模式</div>
+        <div style="display:flex;gap:10px">${dirBtn('you2ta', '你猜 ta', '考你懂不懂 ta')}${dirBtn('ta2you', 'ta 猜你', '考 ta 懂不懂你')}</div>
+        <div style="font-size:13px;color:#c98a5e;font-weight:700;margin:18px 4px 10px">出题方式</div>
+        <div style="display:flex;gap:10px">${srcBtn('mix', '题库+剧情', '经典60题掺剧情题')}${srcBtn('scan', '全按设定', '通读 ta 设定/剧情出题')}</div>
+        ${charPick}
+        <button data-action="xc-begin" style="width:100%;border:none;border-radius:14px;padding:14px;margin-top:20px;background:linear-gradient(135deg,#ff8c69,#ff6b9d);color:#fff;font-size:15px;font-weight:700;cursor:pointer">开始挑战 (10 题)</button>`;
+      return head('默契度大挑战') + `<div class="xhs-scroll" style="background:#fff4ee;padding:16px">${body}</div>`;
+    }
+
+    const total = m.questions.length;
+    if (m.phase === 'done') {
+      const pct = m.pct || 0;
+      const tier = pct >= 90 ? '灵魂伴侣 💕' : pct >= 70 ? '老夫老妻级 💗' : pct >= 50 ? '还算懂 🙂' : pct >= 30 ? '革命友谊 🤝' : '塑料默契 😐';
+      const recap = m.results.map((r, i) => { const ic = r.match === 2 ? '✅' : r.match === 1 ? '🟡' : '❌'; return `<div style="background:#fff;border-radius:12px;padding:11px 13px;margin-bottom:9px"><div style="font-size:12.5px;color:#888;margin-bottom:5px">${ic} ${i + 1}. ${esc(r.q)}</div><div style="font-size:12.5px;color:#b56b89;line-height:1.6">${dirYou ? '你的真实答案' : '你猜的'}:${esc(r.mine)}</div><div style="font-size:12.5px;color:#5a8a5a;line-height:1.6">${dirYou ? esc(m.cname) + ' 猜你' : esc(m.cname)}:${esc(r.theirs)}</div></div>`; }).join('');
+      return head('默契结果') + `<div class="xhs-scroll" style="background:#fff4ee;padding:16px">
+        <div style="background:#fff;border-radius:18px;padding:22px 16px;text-align:center;box-shadow:0 3px 14px rgba(255,140,105,.18);margin-bottom:14px">
+          <div style="font-size:46px;font-weight:800;color:#ff6b9d;line-height:1">${pct}<span style="font-size:20px">%</span></div>
+          <div style="font-size:16px;font-weight:700;color:#333;margin-top:8px">${tier}</div>
+        </div>
+        ${m.verdict ? `<div style="background:#fff5f0;border-left:3px solid #ff8c69;border-radius:12px;padding:13px 15px;margin-bottom:16px;font-size:13.5px;color:#6a5a52;line-height:1.7">💬 ${esc(m.cname)}:${esc(m.verdict)}</div>` : ''}
+        <div style="font-size:13px;color:#c98a5e;font-weight:700;margin:0 4px 10px">逐题回顾</div>
+        ${recap}
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <button data-action="xc-again" style="flex:1;border:none;border-radius:12px;padding:12px;background:linear-gradient(135deg,#ff8c69,#ff6b9d);color:#fff;font-size:14px;font-weight:700;cursor:pointer">再来一轮</button>
+          <button data-action="xc-exit" style="flex:1;border:none;border-radius:12px;padding:12px;background:#fff;color:#888;font-size:14px;cursor:pointer">返回</button>
+        </div>
+      </div>`;
+    }
+
+    const r = m.results[m.idx];
+    const prog = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><div style="flex:1;height:7px;background:#ffe0d3;border-radius:4px;overflow:hidden"><div style="height:100%;width:${(m.idx + (m.phase === 'reveal' ? 1 : 0)) / total * 100}%;background:linear-gradient(90deg,#ff8c69,#ff6b9d);border-radius:4px"></div></div><div style="font-size:12px;color:#c98a5e;font-weight:700;white-space:nowrap">${m.idx + 1} / ${total}</div></div>`;
+    const sub = dirYou ? `第 ${m.idx + 1} 题 · ${esc(m.cname)} 猜你` : `第 ${m.idx + 1} 题 · 关于 ${esc(m.cname)}`;
+    const qcard = `<div style="background:#fff;border-radius:16px;padding:20px 16px;text-align:center;box-shadow:0 3px 12px rgba(255,140,105,.14);margin-bottom:16px"><div style="font-size:12px;color:#c98a5e;margin-bottom:8px">${sub}</div><div style="font-size:17px;font-weight:700;color:#333;line-height:1.5">${esc(m.questions[m.idx])}</div></div>`;
+
+    if (m.phase === 'guess') {
+      const ph = dirYou ? '写下你自己的真实答案…' : '写下你猜 ta 会怎么答…';
+      const btn = dirYou ? '让 ta 猜 →' : '翻牌看 ta 的答案 →';
+      const body = `${prog}${qcard}
+        <textarea id="xc-guess-input" placeholder="${ph}" style="width:100%;box-sizing:border-box;min-height:80px;border:1.5px solid #ffd9c9;border-radius:14px;padding:12px;font-size:14px;outline:none;resize:vertical;background:#fff;color:#333">${esc(readInputCache('xc-guess-input') || '')}</textarea>
+        <button data-action="xc-guess" style="width:100%;border:none;border-radius:14px;padding:14px;margin-top:12px;background:linear-gradient(135deg,#ff8c69,#ff6b9d);color:#fff;font-size:15px;font-weight:700;cursor:pointer">${btn}</button>`;
+      return head('默契度大挑战') + `<div class="xhs-scroll" style="background:#fff4ee;padding:16px">${body}</div>`;
+    }
+
+    const mIc = r.match === 2 ? '✅ 猜中了!' : r.match === 1 ? '🟡 沾点边' : '❌ 没猜中';
+    const mColor = r.match === 2 ? '#5a8a5a' : r.match === 1 ? '#c99a3a' : '#c0436e';
+    const lastQ = m.idx >= total - 1;
+    const mineLabel = dirYou ? '你的真实答案' : '你猜的';
+    const theirsLabel = dirYou ? (esc(m.cname) + ' 猜你的') : (esc(m.cname) + ' 的真实答案');
+    const basisTag = r.basis === 'infer' ? (dirYou ? '🎲 ta 基本靠蒙' : '🎲 设定没写·据性格推测') : (dirYou ? '💡 ta 有依据地猜' : '📖 设定/剧情里就有');
+    const body = `${prog}${qcard}
+      <div style="text-align:center;font-size:15px;font-weight:700;color:${mColor};margin-bottom:14px">${mIc}</div>
+      <div style="background:#fff;border-radius:14px;padding:13px 15px;margin-bottom:10px"><div style="font-size:12px;color:#b56b89;margin-bottom:4px">${mineLabel}</div><div style="font-size:14px;color:#333;line-height:1.6">${esc(r.mine)}</div></div>
+      <div style="background:#fff;border-radius:14px;padding:13px 15px;margin-bottom:10px"><div style="font-size:12px;color:#5a8a5a;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>${theirsLabel}</span><span style="font-size:10px;color:#b3a59c;font-weight:600;white-space:nowrap">${basisTag}</span></div><div style="font-size:14px;color:#333;line-height:1.6">${esc(r.theirs)}</div></div>
+      ${r.reaction ? `<div style="background:#fff5f0;border-left:3px solid #ff8c69;border-radius:10px;padding:11px 13px;margin-bottom:16px;font-size:13px;color:#7a6a62;line-height:1.6">💬 ${esc(r.reaction)}</div>` : ''}
+      <button data-action="${lastQ ? 'xc-finish' : 'xc-next'}" style="width:100%;border:none;border-radius:14px;padding:14px;background:linear-gradient(135deg,#ff8c69,#ff6b9d);color:#fff;font-size:15px;font-weight:700;cursor:pointer">${lastQ ? '看最终默契度 🎉' : '下一题 →'}</button>`;
+    return head('默契度大挑战') + `<div class="xhs-scroll" style="background:#fff4ee;padding:16px">${body}</div>`;
+  }
+
+  const XICHANG_LAUNCHED = false; // ← 小剧场做完后改成 true,就对所有用户显示
+  let _devKnockN = 0, _devKnockT = 0;
+  function xichangOn() { if (XICHANG_LAUNCHED) return true; try { return getTop().localStorage.getItem('xhs_yuyuan_dev') === '1'; } catch (e) { return false; } }
+  function devKnock() {
+    const now = Date.now();
+    if (now - _devKnockT > 2500) _devKnockN = 0;
+    _devKnockT = now; _devKnockN++;
+    if (_devKnockN >= 7) {
+      _devKnockN = 0;
+      let on = false; try { on = getTop().localStorage.getItem('xhs_yuyuan_dev') === '1'; } catch (e) {}
+      try { getTop().localStorage.setItem('xhs_yuyuan_dev', on ? '0' : '1'); } catch (e) {}
+      toastr.success(on ? '🔧 开发者模式已关闭,小剧场已隐藏' : '🔧 开发者模式已开启,小剧场已解锁~');
+      refreshXhs();
+    }
+  }
+
   function renderHome(d) {
     const xhsBadge = totalUnread(d);
     const wxBadge = wxUnread(d);
@@ -1162,7 +1481,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
     return `
       <div class="xhs-home" style="background:${grad};--home-fg:${esc(d.homeText || '#ffffff')}">
         ${wallUrl ? `<img class="xhs-home-wall" src="${esc(wallUrl)}" onerror="this.style.display='none'"/>` : ''}
-        <div class="xhs-home-clock">
+        <div class="xhs-home-clock" data-action="dev-knock">
           <div class="xhs-home-time" id="xhs-home-time">--:--</div>
           <div class="xhs-home-date">${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</div>
         </div>
@@ -1171,6 +1490,7 @@ JSON 里额外给:"clues":[发现的具体重合线索,没有就空数组],"evid
           ${icon('wx', '💬', '微信', 'linear-gradient(135deg,#5fd36a,#1aad19)', wxBadge)}
           ${icon('set', '⚙️', '设置', 'linear-gradient(135deg,#b0b8c4,#79818c)', 0)}
           <div class="xhs-app" data-action="open-charphone"><div class="xhs-app-icwrap"><div class="xhs-app-ic" style="background:linear-gradient(135deg,#6a5acd,#3a2a6b)">📱${d.charPhoneAppIcon ? `<img class="xhs-app-img" referrerpolicy="no-referrer" src="${esc(d.charPhoneAppIcon)}" onerror="this.style.display='none'" style="position:absolute;inset:0"/>` : ''}</div></div><span class="xhs-app-name">ta 的手机</span></div>
+          ${xichangOn() ? `<div class="xhs-app" data-action="open-xichang"><div class="xhs-app-icwrap"><div class="xhs-app-ic" style="background:linear-gradient(135deg,#ffb347,#ff8c69)">🎭</div></div><span class="xhs-app-name">小剧场</span></div>` : ''}
         </div>
       </div>`;
   }
@@ -4638,6 +4958,7 @@ ${String(text || '').slice(0, 12000)}`;
   // 从角色卡 + 世界书(禁用条目也读)识别出场角色;条目多时逐条识别,避免一次输出被截断漏人
   async function detectCast(auto) {
     const card = getRoleDescLive(); // 实时读当前卡内容,避免绑定的别张卡混进识别
+    let startName2 = ''; try { startName2 = String((getCtx() || {}).name2 || '').trim(); } catch (e) {} // 记下"开始识别时这张卡"的身份,异步完后校验有没有切卡
     // 自动模式双保险:① 必须读到当前卡本身;② getCharData 的名字要和【当前对话的 char 名】对得上——
     // 对不上=getCharData 滞后/串卡(切卡太快时它可能还返回上一张卡),这种一律跳过,绝不识别,避免把别张卡的 char 填进来。
     if (auto) {
@@ -4679,6 +5000,15 @@ ${String(text || '').slice(0, 12000)}`;
     for (let i = 0; i < useBatches.length; i++) {
       const r = await detectCastFromText(`第 ${i + 1}/${useBatches.length} 批设定`, useBatches[i]);
       found = found.concat(r);
+    }
+    // 【切卡校验】识别很慢(可达数十秒),期间用户可能切到别的卡。识别结果只属于"开始识别时那张卡"——
+    // 若当前已不是那张(name2 变了,读不到 name2 时退而比卡正文),直接作废:不弹窗、不入册,杜绝把旧卡的人塞进新卡。
+    {
+      let nowName2 = ''; try { nowName2 = String((getCtx() || {}).name2 || '').trim(); } catch (e) {}
+      let switched = false;
+      if (startName2 && nowName2) { switched = (startName2 !== nowName2); }
+      else { let nowCard = ''; try { nowCard = getRoleDescLive(); } catch (e) {} switched = !!(card && nowCard && nowCard.trim().slice(0, 300) !== card.trim().slice(0, 300)); }
+      if (switched) { if (!auto) { try { toastr.info('检测到你已切换角色卡,这次识别已作废~'); } catch (e) {} } return; }
     }
     // 按名字合并去重;同名保留人设更全的那条,主次取"任一为主则主"
     const byName = new Map();
@@ -9246,6 +9576,18 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
           case 'dismiss-notif': await dismissNotif(id); break;
           case 'open-app': await openApp(app); break;
           case 'open-charphone': await openCharPhone(); break;
+          case 'dev-knock': devKnock(); break;
+          case 'open-xichang': if (!xichangOn()) break; await openXichang(); break;
+          case 'xc-match-start': await xcMatchStart(); break;
+          case 'xc-set-dir': await xcSetDir($btn.data('dir')); break;
+          case 'xc-set-src': await xcSetSrc($btn.data('src')); break;
+          case 'xc-set-char': await xcSetChar(id); break;
+          case 'xc-begin': await xcBegin(); break;
+          case 'xc-again': await xcAgain(); break;
+          case 'xc-guess': await xcGuess(); break;
+          case 'xc-next': await xcNext(); break;
+          case 'xc-finish': await xcFinish(); break;
+          case 'xc-exit': await xcExit(); break;
           case 'cp-open': await cpNav(route); if (route === 'cp-music') { const dm = loadData(); if (!dm.charPhoneMusic) genCharMusic(); } else if (route === 'cp-taobao') { const dm = loadData(); if (!dm.charPhoneTaobao) genCharTaobao(); } else if (route === 'cp-alipay') { const dm = loadData(); if (!dm.charPhoneAlipay) genCharAlipay(); } else if (route === 'cp-doubao') { const dm = loadData(); if (!dm.charPhoneDoubao) genCharDoubao(); } else if (route === 'cp-poop') { const dm = loadData(); if (!dm.charPhonePoop) genCharPoop(); } else if (route === 'cp-monitor') { const dm = loadData(); if (!dm.charPhoneMonitor) genCharMonitor(); } else if (route === 'cp-kuchazi') { const dm = loadData(); if (!dm.charPhoneKuchazi) genCharKuchazi(); } break;
           case 'cp-music-refresh': await genCharMusic(); break;
           case 'cp-tb-refresh': await genCharTaobao(); break;
@@ -10467,7 +10809,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v358 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v366 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();

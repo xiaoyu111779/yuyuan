@@ -14,7 +14,7 @@
   const GLOBAL_APPEARANCE_KEY = 'xhs_appearance_v1';
   const GLOBAL_PREFS_KEY = 'xhs_global_prefs_v1';
   // 全局共享(跨对话跨卡):热梗/表情包/禁词/全局附加提示词/整体聊天风格(活人感)
-  const GLOBAL_PREFS_KEYS = ['memes', 'stickers', 'banWords', 'extraPrompt', 'chatStyle', 'api'];
+  const GLOBAL_PREFS_KEYS = ['memes', 'stickers', 'banWords', 'extraPrompt', 'chatStyle', 'api', 'beanEmoji'];
   // ====== 默认外观(发给别人时,新用户首次打开就是这套;他们仍可自行修改) ======
   // 用设置里的"📋 导出当前外观为默认"按钮生成,把内容贴回这里即可。
   const THEME_DEFAULTS = {
@@ -76,6 +76,7 @@
     charLurkAlias: '',        // char 潜伏时用的马甲名
     lurkThoughts: false,      // 偷听 char 心声(上帝视角,只有 user 看得到,不进主线)
     stickers: [],             // 自定义表情包 [{name, url}]
+    beanEmoji: true,          // 私信里 char 是否用黄豆 emoji 表情(🙂😂🥺);关=只发用户导入的表情包
     storySummary: null,
     storySummaryAt: null,
     charBinding: null,
@@ -2909,6 +2910,11 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
           <div class="xhs-set-help">一行一个,格式 名字：图片URL</div>
           <textarea id="set-stickers" rows="4" placeholder="开心：https://.../happy.png&#10;裂开：https://.../crack.png">${esc((d.stickers || []).map(s => `${s.name}：${s.url}`).join('\n'))}</textarea>
           ${(d.stickers || []).length ? `<div class="xhs-sticker-preview">${d.stickers.map(s => `<img src="${esc(s.url)}" title="${esc(s.name)}"/>`).join('')}</div>` : ''}
+          <label class="xhs-set-check" style="margin-top:8px">
+            <input id="set-bean-emoji" type="checkbox" ${d.beanEmoji !== false ? 'checked' : ''}/>
+            私信里让 char 用黄豆 emoji 表情(🙂😂🥺)
+          </label>
+          <div class="xhs-set-help">关掉后:char 私信/评论不再用 emoji 黄豆表情,想发表情就【只发你上面导入的表情包】(没导入就纯文字)。</div>
         </details>
 
         <details class="xhs-set-section">
@@ -3619,7 +3625,9 @@ ${wb ? `【世界书/设定】:\n${wb}\n` : ''}
   // char 评论也能用 user 表情包库:提示词里给可用表情名 + 把表情名映射成 url
   function stickerHintLine(d) {
     const names = (d.stickers || []).map(s => s.name).filter(Boolean);
-    const base = `\n【表情】想表达情绪就用【真 emoji】(🙂😂🥺😏🙄…),【别打「[微笑]」「[捂脸]」这种方括号文字码】。`;
+    const base = (d.beanEmoji !== false)
+      ? `\n【表情】想表达情绪就用【真 emoji】(🙂😂🥺😏🙄…),【别打「[微笑]」「[捂脸]」这种方括号文字码】。`
+      : `\n【表情·重要】一律【不要用任何 emoji 黄豆小表情】(🙂😂🥺😏🙄… 这类圆脸黄豆全都别用),也别打方括号文字码;${names.length ? '想配表情时【只用下面给的导入表情包】。' : '就用纯文字表达情绪。'}`;
     const stk = names.length ? `\n【表情包·私聊要常用】聊到开心/调侃/害羞/无语/撒娇/想活跃气氛时,就【大方发表情包】,像真人发微信/私信那样常用——尤其私下、暧昧、熟络的对话更要发。【发法】:把表情【单独作为 texts 数组里的一条】,原样写成「[表情:表情名]」(表情名必须从这些里【原样】挑一个:${names.join('、')}),解析时会自动变成表情。该发就发、可以和文字穿插,但别一连串只刷表情。` : '';
     return base + stk;
   }
@@ -8946,6 +8954,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
         setTimeout(() => toastr.warning(`表情包:已存 ${d.stickers.length} 个,有 ${skipped} 行没认出——每行要写成「名字：链接」、链接以 http 开头${stkLines.length > 200 ? ';且上限 200 个' : ''}`, '', { timeOut: 6000 }), 150);
       }
     }
+    if (has('set-bean-emoji')) d.beanEmoji = !!chk('set-bean-emoji');
     if (has('set-sync-main')) { d.syncToMain = !!chk('set-sync-main'); }
     if (has('set-wxdm-sync')) d.wxDmSync = !!chk('set-wxdm-sync');
     if (has('set-xhsdm-sync')) d.xhsDmSync = !!chk('set-xhsdm-sync');
@@ -10809,7 +10818,7 @@ ${role ? `角色设定/性格: ${role}\n` : ''}${cworld ? `世界观/背景: ${c
   [400, 1200, 3000, 6000].forEach(ms => { try { setTimeout(() => { try { ensureFab(false); } catch (e) {} }, ms); } catch (e) {} });
 
   if (typeof toastr !== 'undefined') {
-    toastr.success('📱 芋圆机 v366 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
+    toastr.success('📱 芋圆机 v367 已加载,输入 /yuyuan 或点「芋圆机弹出」按钮打开', '', { timeOut: 3000 });
   }
   try { setTimeout(() => { try { pushXhsDirective(); } catch (e) {} }, 1500); } catch (e) {}
 })();
